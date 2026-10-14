@@ -49,8 +49,16 @@ src/
   server/rooms.ts      salas en memoria
 ```
 
-## Publicarlo en internet
+## Publicarlo en internet (Render, gratis)
 
-Las salas viven en la memoria del proceso de Node, así que sirve cualquier hosting con un servidor Node
-persistente (Railway, Render, Fly.io). En Vercel (serverless) hace falta mover `src/server/rooms.ts` a una
-base compartida (Supabase / Redis).
+El repo trae un `render.yaml` listo:
+
+1. Entrá a https://dashboard.render.com y logueate con GitHub.
+2. **New → Blueprint** → elegí `julian-raviolo/decido-yo` → **Apply**.
+3. En ~5 minutos te da una URL `https://decido-yo-xxxx.onrender.com`. Cada push a `main` se publica solo.
+
+Notas:
+- Las salas viven en la memoria del servidor, por eso es **una sola instancia**.
+- El plan gratis "duerme" el servidor tras ~15 min sin uso: la primera visita tarda ~1 min en despertar y
+  las salas abiertas se pierden al dormirse (mientras alguien juega, se mantiene despierto).
+- Para algo más robusto: plan pago de Render (no duerme) o mover `src/server/rooms.ts` a Supabase / Redis.
