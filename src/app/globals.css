@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  /* Clásico */
+  --c-bg: 18 18 18;
+  --c-panel: 30 30 30;
+  --c-accent: 198 255 0;
+  --c-special: 255 23 68;
+  --c-felt: 11 90 49;
+  --c-felt-hi: 19 137 75;
+  --pattern: radial-gradient(rgba(255, 253, 247, 0.09) 1.2px, transparent 1.2px);
+  --pattern-size: 22px 22px;
+}
+
+/* HOT 😇😈: rojo intenso, halos dorados y cuernitos sutiles en el fondo. */
+:root[data-mode='hot'] {
+  --c-bg: 158 0 20;
+  --c-panel: 96 0 14;
+  --c-accent: 255 209 102;
+  --c-special: 26 0 6;
+  --c-felt: 92 0 16;
+  --c-felt-hi: 140 0 26;
+  --pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cellipse cx='28' cy='30' rx='11' ry='4' fill='none' stroke='%23FFD166' stroke-opacity='0.22' stroke-width='2.5'/%3E%3Cpath d='M82 94c-2-9 1-15 6-18-1 6 1 10 5 12m14 6c2-9-1-15-6-18 1 6-1 10-5 12' fill='none' stroke='%23000' stroke-opacity='0.28' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='92' cy='26' r='1.6' fill='%23FFFDF7' fill-opacity='0.25'/%3E%3Ccircle cx='24' cy='92' r='1.6' fill='%23FFFDF7' fill-opacity='0.25'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 50% 0%, rgba(255, 80, 80, 0.35), transparent 60%);
+  --pattern-size: 120px 120px, 100% 100%;
+}
+
+html,
+body {
+  background-color: rgb(var(--c-bg));
+  color: #fffdf7;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  transition: background-color 400ms ease;
+}
+
+body {
+  background-image: var(--pattern);
+  background-size: var(--pattern-size);
+  background-attachment: fixed;
+  font-family: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Evita el zoom automático de iOS en inputs (>= 16px). */
+input,
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+button {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
