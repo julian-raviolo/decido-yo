@@ -32,6 +32,8 @@ export function HandDock({
     { slot: 'defense', title: 'Escudos', cards: me.defenses, tint: '#00E5FF' },
   ];
   const total = me.actions.length + me.defenses.length;
+  const compact = useShortScreen();
+  const size = compact ? 'md' : 'hand';
 
   return (
     <div
@@ -41,14 +43,14 @@ export function HandDock({
     >
       {groups.map(({ slot, title, cards, tint }, g) => (
         <div key={slot} className="flex shrink-0 items-end gap-3">
-          {g > 0 && <div className="h-[150px] w-[3px] shrink-0 self-center rounded-full bg-white/15" aria-hidden />}
+          {g > 0 && <div className={`${compact ? 'h-[110px]' : 'h-[150px]'} w-[3px] shrink-0 self-center rounded-full bg-white/15`} aria-hidden />}
           <div className="flex flex-col gap-1.5">
             <span className="flex items-center gap-1.5 pl-1 text-[10px] font-black uppercase tracking-widest text-white/70">
               <span className="h-2.5 w-2.5 rounded-full border-2 border-black" style={{ background: tint }} />
               {title} · {readyCount(cards)}/{cards.length}
             </span>
             <div className="flex gap-2.5">
-              {cards.length === 0 && <CardBack size="hand" label="Sin cartas disponibles" />}
+              {cards.length === 0 && <CardBack size={size} label="Sin cartas disponibles" />}
               {cards.map((card, i) => {
                 const usable = card.state === 'ready';
                 const gag = slot === 'action' && gagged;
@@ -66,7 +68,7 @@ export function HandDock({
                   >
                     <GameCard
                       cardId={card.cardId}
-                      size="hand"
+                      size={size}
                       state={usable ? (locked ? 'locked' : 'ready') : 'burned'}
                       lockLabel={gag ? 'Amordazada' : 'Sin usos esta semana'}
                     />
@@ -79,6 +81,19 @@ export function HandDock({
       ))}
     </div>
   );
+}
+
+/** Pantallas bajas (ej. iPhone SE): la mano usa cartas más chicas. */
+function useShortScreen() {
+  const [short, setShort] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-height: 740px)');
+    const update = () => setShort(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return short;
 }
 
 const readyCount = (cards: HandCard[]) => cards.filter((c) => c.state === 'ready').length;

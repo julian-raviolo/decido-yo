@@ -389,6 +389,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           cardId: card.id,
           targetId: target.id,
           fromId: play.fromId,
+          startedAt: Date.now(),
           endsAt: Date.now() + card.durationMin * durationFactor * MIN,
         },
       });

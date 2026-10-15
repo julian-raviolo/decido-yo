@@ -1,10 +1,8 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Gavel, Timer } from 'lucide-react';
 import { GameCard } from '@/components/GameCard';
 import { getCard } from '@/data/cards-catalog';
-import { formatCountdown } from '@/lib/utils';
 import type { PlayStatus, Room } from '@/types/game';
 
 const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
@@ -21,18 +19,17 @@ const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
   defense: { text: 'Defensa', bg: '#00E5FF' },
 };
 
-export function TableZone({ room, now }: { room: Room; now: number }) {
+export function TableZone({ room }: { room: Room }) {
   const name = (id: string | null) => {
     const p = room.players.find((x) => x.id === id);
     return p ? (p.isMe ? 'Vos' : p.name) : 'Mesa';
   };
   const recent = room.table.slice(-6);
-  const effects = room.effects.filter((e) => e.endsAt > now);
 
   return (
-    <section className="flex min-h-[210px] flex-1 flex-col gap-3">
+    <section className="flex min-h-[118px] flex-[3] flex-col">
       <div
-        className="relative min-h-[210px] flex-1 overflow-hidden rounded-[2rem] border-4 border-black bg-felt shadow-brutal"
+        className="relative min-h-0 flex-1 overflow-hidden rounded-[2rem] border-4 border-black bg-felt shadow-brutal"
         style={{
           backgroundImage:
             'radial-gradient(circle at 50% 40%, rgb(var(--c-felt-hi)) 0%, rgb(var(--c-felt)) 70%)',
@@ -93,35 +90,6 @@ export function TableZone({ room, now }: { room: Room; now: number }) {
         )}
       </div>
 
-      {(room.rules.length > 0 || effects.length > 0) && (
-        <div className="flex flex-col gap-2">
-          {room.rules.map((r) => (
-            <div
-              key={r.id}
-              className="flex items-center gap-2 rounded-2xl border-[3px] border-black bg-special px-3 py-2 text-[12px] font-bold text-white shadow-brutal-sm"
-            >
-              <Gavel size={16} strokeWidth={3} className="shrink-0" />
-              <span className="leading-tight">
-                <b className="uppercase">Regla de {name(r.byId)}:</b> {r.text}
-              </span>
-            </div>
-          ))}
-          {effects.map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center gap-2 rounded-2xl border-[3px] border-black bg-cream px-3 py-2 text-[12px] font-bold text-black shadow-brutal-sm"
-            >
-              <Timer size={16} strokeWidth={3} className="shrink-0" />
-              <span className="flex-1 truncate">
-                {getCard(e.cardId).name} → <b>{name(e.targetId)}</b>
-              </span>
-              <span className="rounded-full bg-black px-2 py-0.5 font-mono text-[11px] text-lime">
-                {formatCountdown(e.endsAt - now)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </section>
   );
 }
@@ -135,9 +103,12 @@ export function LogFeed({ room }: { room: Room }) {
     info: 'border-l-white/40',
   };
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className="flex min-h-[72px] flex-[2] flex-col gap-1.5 overflow-y-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <li className="sticky top-0 z-10 bg-night/90 px-1 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-white/50 backdrop-blur-sm">
+        Historial
+      </li>
       <AnimatePresence initial={false}>
-        {room.log.slice(0, 4).map((l) => (
+        {room.log.slice(0, 30).map((l) => (
           <motion.li
             key={l.id}
             layout

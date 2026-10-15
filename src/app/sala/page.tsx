@@ -11,6 +11,7 @@ import { PlayersBar } from '@/components/room/PlayersBar';
 import { RouletteModal } from '@/components/room/RouletteModal';
 import { RpsModal } from '@/components/room/RpsModal';
 import { BotSheet, RuleSheet, VictimPicker } from '@/components/room/Sheets';
+import { ActiveBar } from '@/components/room/ActiveBar';
 import { LogFeed, TableZone } from '@/components/room/TableZone';
 import { Pill } from '@/components/ui';
 import { formatCountdown } from '@/lib/utils';
@@ -199,10 +200,13 @@ export default function SalaPage() {
           )}
       </div>
 
+      {/* En curso: contadores y reglas, anclados arriba de la mesa */}
+      <ActiveBar room={room} now={now} />
+
       {/* Mesa (zona scrolleable) */}
-      <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2 [scrollbar-width:none]">
+      <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 [scrollbar-width:none]">
         {isFriends && n === 1 && (
-          <div className="rounded-3xl border-4 border-black bg-lime p-4 text-black shadow-brutal">
+          <div className="shrink-0 rounded-3xl border-4 border-black bg-lime p-4 text-black shadow-brutal">
             <div className="flex items-center gap-2 font-display text-lg font-black uppercase">
               <Users size={20} strokeWidth={3} /> {room.mode === 'hot' ? 'Invitá a tu pareja' : 'Invitá a tus amigos'}
             </div>
@@ -225,12 +229,12 @@ export default function SalaPage() {
           </div>
         )}
         {waitingOn.length > 0 && (
-          <div className="flex items-center gap-2 rounded-2xl border-[3px] border-black bg-panel px-3 py-2 text-[12px] font-bold text-white">
+          <div className="flex shrink-0 items-center gap-2 rounded-2xl border-[3px] border-black bg-panel px-3 py-2 text-[12px] font-bold text-white">
             <Hourglass size={14} strokeWidth={3} className="shrink-0 animate-pulse" />
             Esperando a {Array.from(new Set(waitingOn)).join(', ')}…
           </div>
         )}
-        <TableZone room={room} now={now} />
+        <TableZone room={room} />
         <LogFeed room={room} />
       </div>
 

@@ -151,6 +151,8 @@ export interface ActiveEffect {
   cardId: string;
   targetId: string;
   fromId: string;
+  /** Inicio del efecto (para la barra de progreso). */
+  startedAt?: number;
   endsAt: number;
 }
 
