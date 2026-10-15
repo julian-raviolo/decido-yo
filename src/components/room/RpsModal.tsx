@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Hand, Scissors, Square } from 'lucide-react';
+import { Grab, Hand, Scissors } from 'lucide-react';
 import { BrutalButton } from '@/components/ui';
 import { getCard } from '@/data/cards-catalog';
 import type { Player, RpsMatch } from '@/types/game';
 
 type Move = 'piedra' | 'papel' | 'tijera';
 const MOVES: { id: Move; label: string; icon: typeof Hand; color: string }[] = [
-  { id: 'piedra', label: 'Piedra', icon: Square, color: '#FF5722' },
+  { id: 'piedra', label: 'Piedra', icon: Grab, color: '#FF5722' },
   { id: 'papel', label: 'Papel', icon: Hand, color: '#FFD600' },
   { id: 'tijera', label: 'Tijera', icon: Scissors, color: '#00E5FF' },
 ];
@@ -79,10 +79,10 @@ export function RpsModal({
         {!vsBot && (
           <div className="mt-5 flex flex-col gap-3">
             <BrutalButton variant="cyan" onClick={() => onResolve(true)}>
-              Ganó {defender?.isMe ? 'vos' : defender?.name} (se anula)
+              {defender?.isMe ? '¡Gané yo!' : `Ganó ${defender?.name}`} (se anula)
             </BrutalButton>
             <BrutalButton variant="red" onClick={() => onResolve(false)}>
-              Ganó {attacker?.isMe ? 'vos' : attacker?.name} ({penalty})
+              {attacker?.isMe ? '¡Gané yo!' : `Ganó ${attacker?.name}`} ({penalty})
             </BrutalButton>
           </div>
         )}
