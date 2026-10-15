@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Copy, Flame, Home, Hourglass, ScrollText, Lock, LogOut, Share2, ShieldCheck, Users, WifiOff } from 'lucide-react';
+import { Bot, Copy, Flame, Home, Hourglass, ScrollText, LogOut, Share2, Users, WifiOff } from 'lucide-react';
 import { WEEKLY_BURNS, getCard, handSizeFor } from '@/data/cards-catalog';
 import { isGagged, isImmune, useGame, useNow } from '@/context/GameContext';
 import { CardFocus, HandDock, type Focus } from '@/components/room/HandDock';
@@ -12,9 +12,9 @@ import { RouletteModal } from '@/components/room/RouletteModal';
 import { RpsModal } from '@/components/room/RpsModal';
 import { BotSheet, RuleSheet, VictimPicker } from '@/components/room/Sheets';
 import { ActiveBar } from '@/components/room/ActiveBar';
+import { RestrictionsBar } from '@/components/room/RestrictionsBar';
 import { LogFeed, TableZone } from '@/components/room/TableZone';
 import { Pill, Sheet } from '@/components/ui';
-import { formatCountdown } from '@/lib/utils';
 import type { Player } from '@/types/game';
 
 export default function SalaPage() {
@@ -205,18 +205,11 @@ export default function SalaPage() {
           <Pill className={noBudget ? 'bg-special text-white' : 'bg-cream text-black'}>
             <Flame size={11} strokeWidth={3} /> Usos {budget}/{WEEKLY_BURNS}
           </Pill>
-          {gagged && (
-            <Pill className="bg-special text-white">
-              <Lock size={11} strokeWidth={3} /> Amordazado · {formatCountdown(me.gaggedUntil! - now)}
-            </Pill>
-          )}
-          {immune && (
-            <Pill className="bg-defense text-black">
-              <ShieldCheck size={11} strokeWidth={3} /> Intocable · {formatCountdown(me.immuneUntil! - now)}
-            </Pill>
-          )}
       </div>
 
+
+      {/* Restricciones de cada persona, siempre visibles arriba de la mesa */}
+      <RestrictionsBar room={room} now={now} />
 
       {/* Mesa (zona scrolleable) */}
       <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 [scrollbar-width:none]">
@@ -249,7 +242,7 @@ export default function SalaPage() {
             Esperando a {Array.from(new Set(waitingOn)).join(', ')}…
           </div>
         )}
-        <TableZone room={room} now={now} />
+        <TableZone room={room} />
       </div>
 
       {/* Mano */}

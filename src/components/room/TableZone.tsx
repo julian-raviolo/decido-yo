@@ -3,8 +3,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { GameCard } from '@/components/GameCard';
 import { getCard } from '@/data/cards-catalog';
-import { Gavel } from 'lucide-react';
-import { formatCountdown } from '@/lib/utils';
 import type { PlayStatus, Room } from '@/types/game';
 
 const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
@@ -21,16 +19,15 @@ const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
   defense: { text: 'Defensa', bg: '#00E5FF' },
 };
 
-export function TableZone({ room, now }: { room: Room; now: number }) {
+export function TableZone({ room }: { room: Room }) {
   const name = (id: string | null) => {
     const p = room.players.find((x) => x.id === id);
     return p ? (p.isMe ? 'Vos' : p.name) : 'Mesa';
   };
   const recent = room.table.slice(-6);
-  const effects = room.effects.filter((e) => e.endsAt > now).sort((a, b) => a.endsAt - b.endsAt);
 
   return (
-    <section className="flex min-h-[220px] flex-1 flex-col">
+    <section className="flex min-h-[160px] flex-1 flex-col">
       <div
         className="relative min-h-0 flex-1 overflow-hidden rounded-[2rem] border-4 border-black bg-felt shadow-brutal"
         style={{
@@ -41,38 +38,6 @@ export function TableZone({ room, now }: { room: Room; now: number }) {
         <span className="absolute left-4 top-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/50">
           La Mesa
         </span>
-
-        {/* Temporizadores sutiles: pastillas translúcidas en la esquina */}
-        {(effects.length > 0 || room.rules.length > 0) && (
-          <div className="absolute right-3 top-2.5 z-30 flex max-w-[70%] flex-wrap justify-end gap-1">
-            {effects.slice(0, 4).map((e) => {
-              const card = getCard(e.cardId);
-              const Icon = card.icon;
-              const left = e.endsAt - now;
-              return (
-                <span
-                  key={e.id}
-                  title={`${card.name} → ${name(e.targetId)}`}
-                  className={`flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 font-mono text-[10px] font-bold text-white/85 backdrop-blur-sm ${
-                    left < 60_000 ? 'animate-pulse text-special' : ''
-                  }`}
-                >
-                  <Icon size={11} strokeWidth={2.5} /> {formatCountdown(left)}
-                </span>
-              );
-            })}
-            {effects.length > 4 && (
-              <span className="rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-bold text-white/70">
-                +{effects.length - 4}
-              </span>
-            )}
-            {room.rules.length > 0 && (
-              <span className="flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-bold text-white/85 backdrop-blur-sm">
-                <Gavel size={11} strokeWidth={2.5} /> {room.rules.length}
-              </span>
-            )}
-          </div>
-        )}
 
         {/* Halo detrás de la última carta */}
         {recent.length > 0 && (
