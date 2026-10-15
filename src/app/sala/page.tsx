@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Copy, Flame, Home, Hourglass, Lock, LogOut, Share2, ShieldCheck, Users, WifiOff } from 'lucide-react';
+import { Bot, Copy, Flame, Home, Hourglass, ScrollText, Lock, LogOut, Share2, ShieldCheck, Users, WifiOff } from 'lucide-react';
 import { WEEKLY_BURNS, getCard, handSizeFor } from '@/data/cards-catalog';
 import { isGagged, isImmune, useGame, useNow } from '@/context/GameContext';
 import { CardFocus, HandDock, type Focus } from '@/components/room/HandDock';
@@ -13,7 +13,7 @@ import { RpsModal } from '@/components/room/RpsModal';
 import { BotSheet, RuleSheet, VictimPicker } from '@/components/room/Sheets';
 import { ActiveBar } from '@/components/room/ActiveBar';
 import { LogFeed, TableZone } from '@/components/room/TableZone';
-import { Pill } from '@/components/ui';
+import { Pill, Sheet } from '@/components/ui';
 import { formatCountdown } from '@/lib/utils';
 import type { Player } from '@/types/game';
 
@@ -30,6 +30,11 @@ export default function SalaPage() {
   const [ruleOpen, setRuleOpen] = useState(false);
   const [botSheet, setBotSheet] = useState<Player | null>(null);
   const [copied, setCopied] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [seenLog, setSeenLog] = useState(0);
+  useEffect(() => {
+    if (logOpen && room) setSeenLog(room.log.length);
+  }, [logOpen, room]);
 
   useEffect(() => {
     if (hydrated && !room) router.replace('/');
@@ -133,6 +138,18 @@ export default function SalaPage() {
           {copied && <span className="text-[10px] font-black uppercase">¡Copiado!</span>}
         </button>
         <button
+          onClick={() => setLogOpen(true)}
+          aria-label="Historial"
+          className="relative grid h-11 w-11 place-items-center rounded-2xl border-[3px] border-black bg-cream text-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+        >
+          <ScrollText size={20} strokeWidth={3} />
+          {room.log.length > seenLog && (
+            <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-black bg-special px-1 text-[10px] font-black text-white">
+              {Math.min(room.log.length - seenLog, 9)}
+            </span>
+          )}
+        </button>
+        <button
           onClick={leave}
           aria-label="Salir de la sala"
           className="grid h-11 w-11 place-items-center rounded-2xl border-[3px] border-black bg-special text-white shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
@@ -200,8 +217,6 @@ export default function SalaPage() {
           )}
       </div>
 
-      {/* En curso: contadores y reglas, anclados arriba de la mesa */}
-      <ActiveBar room={room} now={now} />
 
       {/* Mesa (zona scrolleable) */}
       <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 [scrollbar-width:none]">
@@ -234,8 +249,7 @@ export default function SalaPage() {
             Esperando a {Array.from(new Set(waitingOn)).join(', ')}…
           </div>
         )}
-        <TableZone room={room} />
-        <LogFeed room={room} />
+        <TableZone room={room} now={now} />
       </div>
 
       {/* Mano */}
@@ -279,6 +293,13 @@ export default function SalaPage() {
           setArmed(null);
         }}
       />
+
+      <Sheet open={logOpen} onClose={() => setLogOpen(false)} title={<span className="text-white">Historial</span>} tone="#1e1e1e">
+        <div className="flex flex-col gap-4 text-white">
+          <ActiveBar room={room} now={now} />
+          <LogFeed room={room} />
+        </div>
+      </Sheet>
 
       <RuleSheet
         open={ruleOpen}
