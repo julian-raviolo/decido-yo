@@ -47,6 +47,8 @@ const ALLOWED = new Set<RoomAction['type']>([
   'LOG',
   'ADD_PLAY',
   'SET_PLAY_STATUS',
+  'PATCH_PLAY',
+  'VOTE',
   'PATCH_PLAYER',
   'SET_CARD_STATE',
   'ADD_CARD',
@@ -70,7 +72,20 @@ export function applyActions(code: string, actions: RoomAction[]): Snapshot | nu
     if (!a || !ALLOWED.has(a.type)) continue;
     // Clásico hasta 12 jugadores; HOT es exclusivo de parejas (2).
     if (a.type === 'ADD_PLAYER' && room && room.players.length >= MAX_PLAYERS[room.mode]) continue;
+    // Fotos de prueba (Modo Online): tope de tamaño para no inflar la sala.
+    if (a.type === 'PATCH_PLAY' && a.patch.evidence?.image && a.patch.evidence.image.length > 250_000) {
+      a.patch.evidence = { ...a.patch.evidence, image: undefined };
+    }
     room = roomReducer(room, a);
+  }
+  // Una vez votada, la foto se descarta: sólo queda el texto en la sala.
+  if (room) {
+    room = {
+      ...room,
+      table: room.table.map((p) =>
+        p.status !== 'evidence' && p.evidence?.image ? { ...p, evidence: { ...p.evidence, image: undefined } } : p,
+      ),
+    };
   }
   entry.version += 1;
   entry.touchedAt = Date.now();

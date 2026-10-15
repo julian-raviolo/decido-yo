@@ -23,6 +23,8 @@ export type RoomAction =
   | { type: 'LOG'; entry: LogEntry }
   | { type: 'ADD_PLAY'; play: TablePlay }
   | { type: 'SET_PLAY_STATUS'; playId: string; status: PlayStatus; note?: string }
+  | { type: 'PATCH_PLAY'; playId: string; patch: Partial<Omit<TablePlay, 'id'>> }
+  | { type: 'VOTE'; playId: string; playerId: string; vote: 'yes' | 'no' }
   | { type: 'PATCH_PLAYER'; playerId: string; patch: Partial<Omit<Player, 'actions' | 'defenses'>> }
   | { type: 'SET_CARD_STATE'; playerId: string; uid: string; state: HandCard['state'] }
   | { type: 'ADD_CARD'; playerId: string; slot: 'actions' | 'defenses'; card: HandCard }
@@ -76,6 +78,20 @@ export function roomReducer(room: Room | null, action: RoomAction): Room | null 
         ...room,
         table: room.table.map((p) =>
           p.id === action.playId ? { ...p, status: action.status, note: action.note ?? p.note } : p,
+        ),
+      };
+    case 'PATCH_PLAY':
+      return {
+        ...room,
+        table: room.table.map((p) => (p.id === action.playId ? { ...p, ...action.patch } : p)),
+      };
+    case 'VOTE':
+      return {
+        ...room,
+        table: room.table.map((p) =>
+          p.id === action.playId && p.status === 'evidence'
+            ? { ...p, votes: { ...(p.votes ?? {}), [action.playerId]: action.vote } }
+            : p,
         ),
       };
     case 'PATCH_PLAYER':

@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { Bot, Dices, Lock, ShieldCheck, Swords, VolumeX } from 'lucide-react';
 import { GameCard } from '@/components/GameCard';
 import { Avatar, BrutalButton, Sheet } from '@/components/ui';
-import { actionCardsFor } from '@/data/cards-catalog';
+import { actionCardsFor, fitsScenario } from '@/data/cards-catalog';
 import { isGagged, isImmune } from '@/context/GameContext';
-import type { GameMode, Player } from '@/types/game';
+import type { GameMode, Player, Scenario } from '@/types/game';
 
 export function VictimPicker({
   open,
@@ -111,6 +111,7 @@ export function RuleSheet({
 export function BotSheet({
   bot,
   mode,
+  scenario,
   now,
   meImmune,
   onAttack,
@@ -119,6 +120,7 @@ export function BotSheet({
 }: {
   bot: Player | null;
   mode: GameMode;
+  scenario: Scenario;
   now: number;
   meImmune: boolean;
   onAttack: (cardId?: string) => void;
@@ -191,7 +193,7 @@ export function BotSheet({
             </>
           ) : (
             <div className="grid grid-cols-3 justify-items-center gap-3">
-              {actionCardsFor(mode).map((c) => (
+              {actionCardsFor(mode).filter((c) => fitsScenario(c, scenario)).map((c) => (
                 <button
                   key={c.id}
                   onClick={() => {

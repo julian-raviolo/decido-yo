@@ -20,12 +20,22 @@ export function HandDock({
   gagged,
   noBudget,
   onFocus,
+  reshufflesLeft,
+  onReshuffle,
+  rechargeLabel,
+  onRecharge,
 }: {
   me: Player;
   gagged: boolean;
   /** Presupuesto semanal agotado: no se puede quemar nada. */
   noBudget: boolean;
   onFocus: (f: Focus) => void;
+  /** Re-barajados gratis que quedan esta semana. */
+  reshufflesLeft: number;
+  onReshuffle: () => void;
+  /** Precio de recargar una mano entera (ej. "$0.50 USD"). */
+  rechargeLabel: string;
+  onRecharge: () => void;
 }) {
   const groups: { slot: Slot; title: string; cards: HandCard[]; tint: string }[] = [
     { slot: 'action', title: 'Acción', cards: me.actions, tint: '#FFD600' },
@@ -40,6 +50,8 @@ export function HandDock({
   const overlap = 42;
 
   const all = [...me.actions, ...me.defenses];
+  const anyReady = all.some((c) => c.state === 'ready');
+  const outOfCards = !anyReady || noBudget;
   useEffect(() => {
     if (preview && !all.some((c) => c.uid === preview && c.state === 'ready')) setPreview(null);
   }, [all, preview]);
@@ -52,6 +64,32 @@ export function HandDock({
   };
 
   return (
+    <div className="flex flex-col gap-1.5">
+      {outOfCards ? (
+        <div className="flex items-center gap-2 rounded-2xl border-[3px] border-black bg-special px-3 py-2 text-white shadow-brutal-sm">
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block font-display text-sm font-black uppercase">¡Te quedaste sin cartas!</span>
+            <span className="block text-[10px] font-semibold opacity-85">
+              {noBudget ? 'Gastaste tus 10 usos de la semana.' : 'Quemaste toda tu mano.'}
+            </span>
+          </span>
+          <button
+            onClick={onRecharge}
+            className="shrink-0 rounded-2xl border-[3px] border-black bg-lime px-2.5 py-1.5 text-[11px] font-black uppercase text-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+          >
+            ⚡ Recargar · {rechargeLabel.replace(' USD', '')}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-end">
+          <button
+            onClick={onReshuffle}
+            className="flex items-center gap-1 rounded-full border-2 border-black bg-cream px-2.5 py-0.5 text-[10px] font-black uppercase text-black shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+          >
+            🔄 Re-barajar mano · {reshufflesLeft > 0 ? `quedan ${reshufflesLeft}/2 gratis` : '$0.50'}
+          </button>
+        </div>
+      )}
     <div
       onClick={(e) => e.target === e.currentTarget && setPreview(null)}
       className={`-mx-4 flex items-end gap-3 px-4 pb-1 ${
@@ -130,6 +168,7 @@ export function HandDock({
           </div>
         </div>
       ))}
+    </div>
     </div>
   );
 }

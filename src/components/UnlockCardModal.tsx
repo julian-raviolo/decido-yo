@@ -2,26 +2,42 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Crown, Dices, PartyPopper, ShoppingBag } from 'lucide-react';
+import { CheckCircle2, Crown, Dices, Eye, Flame, PartyPopper, Unlock } from 'lucide-react';
 import { GameCard } from '@/components/GameCard';
 import { BrutalButton, Sheet } from '@/components/ui';
-import { PACK_NAMES, activeCardsFor, isDefenseCard } from '@/data/cards-catalog';
+import {
+  PACK_NAMES,
+  PRICES,
+  SCENARIO_META,
+  activeCardsFor,
+  cardMeta,
+  cardScenarios,
+  formatUSD,
+  isDefenseCard,
+} from '@/data/cards-catalog';
 import { randomChallenge } from '@/lib/deck';
 import type { CardDef } from '@/types/game';
 
 type Step = 'choose' | 'checkout' | 'bought' | 'spinning' | 'challenge';
 
 /**
- * Modal de desbloqueo de una carta PRO: comprar el pack (checkout simulado)
- * o probarla gratis hasta el lunes cumpliendo un reto sorteado de las activas.
+ * Vista previa de cualquier carta del mazo (zoom-in, tamaño grande, escenarios).
+ * Si es PRO bloqueada: comprar la expansión ($2.00, checkout simulado) o probarla
+ * gratis hasta el lunes cumpliendo un reto sorteado de las activas.
  */
-export function UnlockCardModal({
+export function CardPreviewModal({
   card,
+  playable,
+  burned,
   onClose,
   onBuyPack,
   onUnlock,
 }: {
   card: CardDef | null;
+  /** Activa o ya desbloqueada. */
+  playable: boolean;
+  /** Quemada esta semana. */
+  burned: boolean;
   onClose: () => void;
   onBuyPack: () => void;
   onUnlock: () => void;
@@ -86,28 +102,75 @@ export function UnlockCardModal({
       onClose={step === 'spinning' ? undefined : close}
       title={
         <span className="flex items-center gap-2">
-          <Crown size={22} strokeWidth={3} /> Carta PRO
+          {card.isLocked ? <Crown size={22} strokeWidth={3} /> : <Eye size={22} strokeWidth={3} />}
+          {card.isLocked ? 'Carta PRO' : 'Vista previa'}
         </span>
       }
       tone={mode === 'hot' ? '#FFF1C9' : '#FFFDF7'}
     >
       <AnimatePresence mode="wait">
         {step === 'choose' && (
-          <motion.div key="choose" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <div className="flex justify-center">
+          <motion.div key="choose" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div
+              className="flex justify-center"
+              initial={{ scale: 0.55, rotate: -6 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: 'spring', damping: 15, stiffness: 220 }}
+            >
               <GameCard cardId={card.id} size="lg" />
+            </motion.div>
+
+            {/* Categoría + escenarios donde aplica */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+              <span
+                className="rounded-full border-2 border-black px-2 py-0.5 text-[10px] font-black uppercase"
+                style={{ backgroundColor: cardMeta(card).color, color: cardMeta(card).text }}
+              >
+                {cardMeta(card).label}
+              </span>
+              {cardScenarios(card).map((sc) => (
+                <span key={sc} className="rounded-full border-2 border-black bg-white px-2 py-0.5 text-[10px] font-black uppercase">
+                  {SCENARIO_META[sc].emoji} {SCENARIO_META[sc].short}
+                </span>
+              ))}
             </div>
-            <p className="mt-4 text-center text-sm font-semibold">
-              Es parte del <b>{pack}</b> (20 cartas). Elegí cómo destrabarla:
-            </p>
-            <div className="mt-4 flex flex-col gap-3">
-              <BrutalButton variant="yellow" className="flex items-center justify-center gap-2 text-sm" onClick={() => setStep('checkout')}>
-                <ShoppingBag size={18} strokeWidth={3} /> Abonar Pack PRO (desbloquear las 20)
-              </BrutalButton>
-              <BrutalButton variant="lime" className="flex items-center justify-center gap-2 text-sm" onClick={spin}>
-                <Dices size={18} strokeWidth={3} /> ¡Probar GRATIS cumpliendo un reto ahora!
-              </BrutalButton>
-            </div>
+
+            {playable ? (
+              <div className="mt-4 flex flex-col items-center gap-2 text-center">
+                <span className="flex items-center gap-1.5 rounded-full border-[3px] border-black bg-lime px-3 py-1 text-sm font-black uppercase text-black">
+                  <CheckCircle2 size={16} strokeWidth={3} /> Carta activa en tu mazo
+                </span>
+                <span
+                  className={`flex items-center gap-1 text-xs font-bold uppercase ${burned ? 'text-special' : 'text-black/60'}`}
+                >
+                  {burned ? (
+                    <>
+                      <Flame size={14} strokeWidth={3} /> Quemada esta semana · vuelve el lunes
+                    </>
+                  ) : (
+                    'Disponible: te puede tocar en la próxima sala'
+                  )}
+                </span>
+              </div>
+            ) : (
+              <>
+                <p className="mt-4 text-center text-sm font-semibold">
+                  Es parte del <b>{pack}</b> (20 cartas). Elegí cómo destrabarla:
+                </p>
+                <div className="mt-4 flex flex-col gap-3">
+                  <BrutalButton
+                    variant="yellow"
+                    className="flex items-center justify-center gap-2 text-sm"
+                    onClick={() => setStep('checkout')}
+                  >
+                    <Unlock size={18} strokeWidth={3} /> Comprar expansión completa (20 PRO) · {formatUSD(PRICES.pack)}
+                  </BrutalButton>
+                  <BrutalButton variant="lime" className="flex items-center justify-center gap-2 text-sm" onClick={spin}>
+                    <Dices size={18} strokeWidth={3} /> Probar esta carta GRATIS con un reto ahora
+                  </BrutalButton>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 
@@ -115,12 +178,12 @@ export function UnlockCardModal({
           <motion.div key="checkout" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div className="rounded-3xl border-4 border-black bg-white p-4 shadow-brutal">
               <div className="text-[11px] font-black uppercase text-black/60">Resumen</div>
-              <div className="mt-1 flex items-center justify-between font-display text-lg font-black uppercase">
-                <span>{pack}</span>
-                <span>20 cartas</span>
+              <div className="mt-1 flex items-center justify-between gap-3 font-display text-lg font-black uppercase">
+                <span className="leading-tight">{pack}</span>
+                <span className="shrink-0">{formatUSD(PRICES.pack)}</span>
               </div>
               <p className="mt-2 text-xs font-semibold text-black/70">
-                Desbloqueo permanente de todas las cartas PRO del modo {mode === 'hot' ? 'HOT' : 'Clásico'}.
+                20 cartas · desbloqueo permanente de todas las PRO del modo {mode === 'hot' ? 'HOT' : 'Clásico'}.
               </p>
               <p className="mt-3 rounded-2xl border-2 border-dashed border-black/40 px-3 py-2 text-center text-[11px] font-bold uppercase text-black/60">
                 Checkout simulado · no se cobra nada
@@ -208,3 +271,6 @@ export function UnlockCardModal({
     </Sheet>
   );
 }
+
+/** Compatibilidad con el nombre anterior. */
+export const UnlockCardModal = CardPreviewModal;

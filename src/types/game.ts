@@ -3,6 +3,15 @@ import type { LucideIcon } from 'lucide-react';
 /** Modo de juego: Clásico o HOT (picante soft). */
 export type GameMode = 'classic' | 'hot';
 
+/** Modalidad: en persona o cada uno en su casa. */
+export type Environment = 'PRESENCIAL' | 'ONLINE';
+
+/** Escenario contextual de la sala (ONLINE siempre es REMOTE). */
+export type Scenario = 'OUTING' | 'HOME' | 'PARTY' | 'CASUAL' | 'REMOTE';
+
+/** Escenarios donde aplica una carta; ALL_PRESENCIAL = cualquiera de los 4 presenciales. */
+export type CardScenario = Scenario | 'ALL_PRESENCIAL';
+
 /** En HOT las mismas categorías se muestran como Cita Picante / Seducción / En Casa / etc. */
 export type Category = 'FOOD' | 'SOCIAL' | 'DESTINY' | 'SPECIAL' | 'DEFENSE';
 
@@ -29,6 +38,8 @@ export interface CardDef {
   category: Category;
   mode: GameMode;
   icon: LucideIcon;
+  /** Escenarios donde puede salir en el reparto. */
+  scenarios: CardScenario[];
   /** Carta PRO: sólo sale en el reparto si está desbloqueada. */
   isLocked: boolean;
   packName?: string;
@@ -61,6 +72,14 @@ export interface Unlocks {
   packs: GameMode[];
   weekKey: string;
   weekly: string[];
+}
+
+/** Economía semanal compartida entre modos: re-barajados gratis. */
+export interface Economy {
+  weekKey: string;
+  weeklyReshufflesRemaining: number;
+  /** Pagos simulados (para métricas / historial de compras). */
+  purchases: { kind: 'reshuffle' | 'recharge' | 'pack'; usd: number; at: number; mode: GameMode }[];
 }
 
 /* ---------- Sala / Juntada ---------- */
@@ -97,7 +116,16 @@ export type PlayStatus =
   | 'gag'
   | 'defense'
   | 'rule'
-  | 'roulette';
+  | 'roulette'
+  /** Modo Online: esperando la prueba de la víctima y el voto de la sala. */
+  | 'evidence';
+
+export interface Evidence {
+  text?: string;
+  /** Foto comprimida (data URL). Se borra al resolverse la votación. */
+  image?: string;
+  at: number;
+}
 
 export interface TablePlay {
   id: string;
@@ -109,6 +137,12 @@ export interface TablePlay {
   /** Rotación aleatoria para la pila de cartas en la mesa. */
   tilt: number;
   note?: string;
+  /** Modo Online: plazo para subir la prueba. */
+  evidenceUntil?: number;
+  evidence?: Evidence;
+  votes?: Record<string, 'yes' | 'no'>;
+  /** Cómo aplicar el efecto si la sala aprueba la prueba. */
+  pending?: { propagate: boolean; durationFactor: number };
 }
 
 /** Ataque entrante a un jugador humano, esperando su decisión. */
@@ -169,6 +203,8 @@ export interface Room {
   code: string;
   createdAt: number;
   mode: GameMode;
+  environment: Environment;
+  scenario: Scenario;
   /** friends = salas reales entre celulares · bots = modo prueba local. */
   kind: 'friends' | 'bots';
   hostId: string;

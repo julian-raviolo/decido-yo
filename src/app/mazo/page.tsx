@@ -4,11 +4,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CalendarClock, CheckCircle2, Crown, Flame, RotateCcw } from 'lucide-react';
 import { GameCard } from '@/components/GameCard';
-import { UnlockCardModal } from '@/components/UnlockCardModal';
+import { CardPreviewModal } from '@/components/UnlockCardModal';
 import { BrutalButton } from '@/components/ui';
 import {
   PACK_NAMES,
+  PRICES,
   WEEKLY_BURNS,
+  formatUSD,
   activeCardsFor,
   categoryMeta,
   proCardsFor,
@@ -24,7 +26,7 @@ export default function MazoPage() {
   const game = useGame();
   const { deck, hydrated, mode, unlockedIds, unlocks } = game;
   const now = useNow(30_000);
-  const [unlocking, setUnlocking] = useState<CardDef | null>(null);
+  const [preview, setPreview] = useState<CardDef | null>(null);
 
   const hot = mode === 'hot';
   const left = hydrated ? deck.weeklyBurnsRemaining : WEEKLY_BURNS;
@@ -80,7 +82,7 @@ export default function MazoPage() {
       <section className="flex flex-col gap-4">
         <div>
           <h2 className="font-display text-lg font-black uppercase">Activas · {active.length}</h2>
-          <p className="text-xs font-semibold text-white/70">Te salen al azar en cada sala.</p>
+          <p className="text-xs font-semibold text-white/70">Te salen al azar según el escenario de la sala. Tocá una para verla en grande.</p>
         </div>
         {ORDER.map((cat) => {
           const cards = active.filter((c) => c.category === cat);
@@ -94,6 +96,7 @@ export default function MazoPage() {
               <CardGrid
                 cards={cards}
                 stateOf={(c) => (hydrated && isBurnedThisWeek(deck, c.id) ? 'burned' : 'ready')}
+                onTap={setPreview}
               />
             </div>
           );
@@ -110,7 +113,7 @@ export default function MazoPage() {
             <p className="text-xs font-semibold text-white/75">
               {packOwned
                 ? 'Pack activo: las 20 cartas pueden salirte en cada sala.'
-                : 'Tocá una carta bloqueada para comprar el pack o probarla gratis con un reto.'}
+                : `Expansión de 20 cartas por ${formatUSD(PRICES.pack)}. Tocá una para verla y probarla gratis con un reto.`}
             </p>
           </div>
           <span className="shrink-0 rounded-full border-[3px] border-black bg-halo px-2 py-0.5 text-[11px] font-black text-black">
@@ -123,7 +126,7 @@ export default function MazoPage() {
             !hydrated || !unlockedIds.includes(c.id) ? 'pro' : isBurnedThisWeek(deck, c.id) ? 'burned' : 'ready'
           }
           badgeOf={(c) => (hydrated && unlockedIds.includes(c.id) && !packOwned ? 'Hasta el lunes' : undefined)}
-          onTap={(c) => hydrated && !unlockedIds.includes(c.id) && setUnlocking(c)}
+          onTap={(c) => hydrated && setPreview(c)}
         />
       </section>
 
@@ -135,11 +138,13 @@ export default function MazoPage() {
         <RotateCcw size={16} strokeWidth={3} /> Reiniciar usos (dev)
       </BrutalButton>
 
-      <UnlockCardModal
-        card={unlocking}
-        onClose={() => setUnlocking(null)}
+      <CardPreviewModal
+        card={preview}
+        playable={!!preview && (!preview.isLocked || unlockedIds.includes(preview.id))}
+        burned={!!preview && hydrated && isBurnedThisWeek(deck, preview.id)}
+        onClose={() => setPreview(null)}
         onBuyPack={() => game.buyPack(mode)}
-        onUnlock={() => unlocking && game.unlockWithChallenge(unlocking.id)}
+        onUnlock={() => preview && game.unlockWithChallenge(preview.id)}
       />
     </div>
   );
@@ -171,7 +176,7 @@ function CardGrid({
           <button
             key={c.id}
             onClick={() => onTap?.(c)}
-            className={`flex flex-col items-center gap-1.5 text-left ${onTap && state === 'pro' ? 'active:scale-95' : 'cursor-default'}`}
+            className={`flex flex-col items-center gap-1.5 text-left transition-transform ${onTap ? 'active:scale-95' : 'cursor-default'}`}
           >
             <div className="relative">
               <GameCard cardId={c.id} size="mini" state={state} />

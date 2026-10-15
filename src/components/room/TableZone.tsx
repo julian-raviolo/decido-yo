@@ -17,6 +17,7 @@ const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
   rule: { text: 'Regla', bg: '#FF1744' },
   roulette: { text: 'Ruleta', bg: '#FF1744' },
   defense: { text: 'Defensa', bg: '#00E5FF' },
+  evidence: { text: 'Votando', bg: '#FFD600' },
 };
 
 export function TableZone({ room }: { room: Room }) {

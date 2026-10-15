@@ -32,5 +32,6 @@ export const STORAGE_KEYS = {
   settings: 'decido-yo:settings',
   decks: 'decido-yo:weekly-decks-v3',
   unlocks: 'decido-yo:unlocks',
-  room: 'decido-yo:room-v3',
+  economy: 'decido-yo:economy',
+  room: 'decido-yo:room-v4',
 } as const;

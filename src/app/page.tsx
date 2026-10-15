@@ -21,7 +21,14 @@ import {
 } from 'lucide-react';
 import { GameCard } from '@/components/GameCard';
 import { BrutalButton, Sheet } from '@/components/ui';
-import { MAX_PLAYERS, WEEKLY_BURNS, activeCardsFor, proCardsFor } from '@/data/cards-catalog';
+import {
+  MAX_PLAYERS,
+  PRESENCIAL_SCENARIOS,
+  SCENARIO_META,
+  WEEKLY_BURNS,
+  activeCardsFor,
+  proCardsFor,
+} from '@/data/cards-catalog';
 import { useGame, useNow } from '@/context/GameContext';
 import { nextReset } from '@/lib/deck';
 import { formatDuration } from '@/lib/utils';
@@ -163,6 +170,67 @@ export default function HomePage() {
         </ModeButton>
       </div>
 
+      {/* Modalidad + escenario */}
+      <section className="flex flex-col gap-3 rounded-3xl border-4 border-black bg-panel p-3.5 shadow-brutal">
+        <div className="text-[11px] font-black uppercase tracking-widest text-white/70">Modalidad</div>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Modalidad">
+          {(
+            [
+              ['PRESENCIAL', '👥', 'Presencial', 'En persona'],
+              ['ONLINE', '📱', 'Online', 'Cada uno en su casa'],
+            ] as const
+          ).map(([env, emoji, label, sub]) => {
+            const active = settings.environment === env;
+            return (
+              <button
+                key={env}
+                role="radio"
+                aria-checked={active}
+                disabled={!!room}
+                onClick={() => game.setEnvironment(env)}
+                className={`flex items-center gap-2 rounded-2xl border-[3px] border-black px-3 py-2 text-left transition-transform active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-60 ${
+                  active ? 'bg-cream text-black shadow-brutal-accent' : 'bg-black/30 text-white/75 shadow-brutal-sm'
+                }`}
+              >
+                <span className="text-xl">{emoji}</span>
+                <span className="leading-tight">
+                  <span className="block font-display text-sm font-black uppercase">{label}</span>
+                  <span className="block text-[10px] font-semibold opacity-70">{sub}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-[11px] font-black uppercase tracking-widest text-white/70">Escenario</div>
+        {settings.environment === 'ONLINE' ? (
+          <div className="flex items-center gap-2 rounded-2xl border-[3px] border-black bg-cream px-3 py-2 text-black shadow-brutal-sm">
+            <span className="text-xl">{SCENARIO_META.REMOTE.emoji}</span>
+            <span className="font-display text-sm font-black uppercase">{SCENARIO_META.REMOTE.label}</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Escenario">
+            {PRESENCIAL_SCENARIOS.map((sc) => {
+              const active = settings.scenario === sc;
+              return (
+                <button
+                  key={sc}
+                  role="radio"
+                  aria-checked={active}
+                  disabled={!!room}
+                  onClick={() => game.setScenario(sc)}
+                  className={`flex items-center gap-2 rounded-2xl border-[3px] border-black px-2.5 py-2 text-left transition-transform active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-60 ${
+                    active ? 'bg-cream text-black shadow-brutal-accent' : 'bg-black/30 text-white/75 shadow-brutal-sm'
+                  }`}
+                >
+                  <span className="text-lg">{SCENARIO_META[sc].emoji}</span>
+                  <span className="text-[11px] font-black uppercase leading-tight">{SCENARIO_META[sc].label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Mazo semanal */}
       <Link
         href="/mazo"
@@ -280,6 +348,9 @@ export default function HomePage() {
             Tenés <b>10 usos por semana</b> por modo. Cada carta quemada no vuelve hasta el lunes.
           </li>
           <li>
+            <b>2 re-barajados gratis</b> por semana; después, $0.50. ¿Sin cartas? Recargá la mano ($0.50 o $0.83).
+          </li>
+          <li>
             Mesa de <b>2 a 6</b>: te tocan <b>2 Acción + 1 Escudo</b>.
           </li>
           {!hot && (
@@ -288,8 +359,8 @@ export default function HomePage() {
             </li>
           )}
           <li>
-            {activeCardsFor(mode).length} cartas activas + {pro.length} <b>PRO</b>: destrabalas con el pack o cumpliendo un
-            reto.
+            {activeCardsFor(mode).length} cartas activas + {pro.length} <b>PRO</b>: destrabalas con el pack ($2.00) o
+            cumpliendo un reto.
           </li>
           <li>
             Te atacan: <b>60 s</b> para defenderte. ¿No cumplís? <b>Ruleta</b>, sí o sí.

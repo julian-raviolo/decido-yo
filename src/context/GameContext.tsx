@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import {
   DEFENSE_WINDOW_SECONDS,
   MAX_PLAYERS,
+  PRICES,
   handSizeFor,
+  rechargePrice,
   GAG_MINUTES,
   IMMUNITY_MINUTES,
   getCard,
@@ -13,8 +15,10 @@ import {
 import { BOT_RULES, HOT_BOT_RULES } from '@/data/punishments';
 import {
   burnCard,
+  addBurns,
   drawCard,
   ensureCurrentWeek,
+  ensureEconomy,
   ensureUnlocks,
   handCard,
   randomActionCard,
@@ -33,12 +37,16 @@ import { STORAGE_KEYS, storage } from '@/lib/storage';
 import { AVATAR_COLORS, pickRandom, roomCode, uid } from '@/lib/utils';
 import type {
   DefenseEffect,
+  Economy,
+  Environment,
+  Evidence,
   GameMode,
   HandCard,
   LogEntry,
   Player,
   Profile,
   Room,
+  Scenario,
   TablePlay,
   Unlocks,
   WeeklyDeck,
@@ -49,6 +57,9 @@ const BOT_NAMES = [
   'Male', 'Santi', 'Flor', 'Bauti', 'Cami', 'Lucho', 'Agus', 'Pili',
 ];
 const MIN = 60_000;
+/** Modo Online: tiempo para subir la prueba y para votar. */
+const EVIDENCE_SECONDS = 120;
+const VOTE_SECONDS = 90;
 
 export const isGagged = (p?: Player | null, now = Date.now()) => !!p?.gaggedUntil && p.gaggedUntil > now;
 export const isImmune = (p?: Player | null, now = Date.now()) => !!p?.immuneUntil && p.immuneUntil > now;
@@ -56,9 +67,19 @@ export const readyCards = (cards: HandCard[]) => cards.filter((c) => c.state ===
 
 type Decks = Record<GameMode, WeeklyDeck>;
 
+const DEFAULT_SETTINGS: Settings = {
+  mode: 'classic',
+  hotConfirmed: false,
+  environment: 'PRESENCIAL',
+  scenario: 'OUTING',
+};
+
 interface Settings {
   mode: GameMode;
   hotConfirmed: boolean;
+  environment: Environment;
+  /** Escenario presencial elegido (ONLINE usa siempre REMOTE). */
+  scenario: Scenario;
 }
 
 interface GameContextValue {
@@ -82,6 +103,17 @@ interface GameContextValue {
   setName(name: string): void;
   setMode(mode: GameMode): void;
   confirmHot(): void;
+  setEnvironment(env: Environment): void;
+  setScenario(scenario: Scenario): void;
+  /** Economía: re-barajados gratis restantes esta semana y compras simuladas. */
+  economy: Economy;
+  /** Re-barajar mano: gratis (2 por semana) o pago simulado ($0.50). */
+  reshuffleHand(paid?: boolean): boolean;
+  /** Recarga paga de una mano completa: reparte cartas nuevas y suma usos. */
+  rechargeHand(): void;
+  /** Modo Online: prueba de la víctima y voto del resto. */
+  submitEvidence(playId: string, evidence: Omit<Evidence, 'at'>): void;
+  voteEvidence(playId: string, vote: 'yes' | 'no'): void;
   createRoom(opts: { kind: 'friends' | 'bots'; bots?: number }): Promise<string>;
   joinRoom(code: string): Promise<void>;
   leaveRoom(): void;
@@ -110,7 +142,8 @@ const defaultProfile = (): Profile => ({ id: uid('p_'), name: '', color: pickRan
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [profile, setProfile] = useState<Profile>({ id: 'me', name: '', color: AVATAR_COLORS[0] });
-  const [settings, setSettings] = useState<Settings>({ mode: 'classic', hotConfirmed: false });
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [economy, setEconomyState] = useState<Economy>(() => ensureEconomy(null));
   const [decks, setDecksState] = useState<Decks>(() => ({
     classic: ensureCurrentWeek(null, 'classic'),
     hot: ensureCurrentWeek(null, 'hot'),
@@ -157,6 +190,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setUnlocksState(next);
   }, []);
   const unlockedNow = () => unlockedCardIds(ensureUnlocks(unlocksRef.current));
+
+  const economyRef = useRef<Economy>(economy);
+  const setEconomy = useCallback((next: Economy) => {
+    economyRef.current = next;
+    setEconomyState(next);
+  }, []);
+  const recordPurchase = (kind: Economy['purchases'][number]['kind'], usd: number, mode: GameMode) => {
+    const e = ensureEconomy(economyRef.current);
+    setEconomy({ ...e, purchases: [...e.purchases, { kind, usd, at: Date.now(), mode }].slice(-100) });
+  };
 
   const deckOf = (mode: GameMode) => ensureCurrentWeek(decksRef.current[mode], mode);
   /** Quema una carta (burnedThisWeek). `consume`: descuenta 1 del presupuesto de 10. */
@@ -234,7 +277,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const p = storage.get<Profile | null>(STORAGE_KEYS.profile, null) ?? defaultProfile();
     profileRef.current = p;
     setProfile(p);
-    const st = storage.get<Settings>(STORAGE_KEYS.settings, { mode: 'classic', hotConfirmed: false });
+    const st = { ...DEFAULT_SETTINGS, ...storage.get<Partial<Settings>>(STORAGE_KEYS.settings, {}) };
+    setEconomy(ensureEconomy(storage.get<Economy | null>(STORAGE_KEYS.economy, null)));
     setSettings(st);
     const saved = storage.get<Partial<Decks>>(STORAGE_KEYS.decks, {});
     setDecks({ classic: ensureCurrentWeek(saved.classic, 'classic'), hot: ensureCurrentWeek(saved.hot, 'hot') });
@@ -247,7 +291,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       connect(savedRoom);
     }
     setHydrated(true);
-  }, [connect, setDecks, setRoom, setUnlocks]);
+  }, [connect, setDecks, setRoom, setUnlocks, setEconomy]);
 
   useEffect(() => {
     if (hydrated) storage.set(STORAGE_KEYS.profile, profile);
@@ -262,6 +306,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (hydrated) storage.set(STORAGE_KEYS.unlocks, unlocks);
   }, [hydrated, unlocks]);
   useEffect(() => {
+    if (hydrated) storage.set(STORAGE_KEYS.economy, economy);
+  }, [hydrated, economy]);
+  useEffect(() => {
     if (!hydrated) return;
     if (room) storage.set(STORAGE_KEYS.room, room);
     else storage.remove(STORAGE_KEYS.room);
@@ -274,10 +321,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (next.classic !== decksRef.current.classic || next.hot !== decksRef.current.hot) setDecks(next);
       const u = ensureUnlocks(unlocksRef.current);
       if (u.weekKey !== unlocksRef.current.weekKey) setUnlocks(u);
+      const e = ensureEconomy(economyRef.current);
+      if (e.weekKey !== economyRef.current.weekKey) setEconomy(e);
     }, 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setDecks, setUnlocks]);
+  }, [setDecks, setUnlocks, setEconomy]);
 
   useEffect(
     () => () => {
@@ -312,7 +361,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       ['defenses', true, size.defenses],
     ] as const) {
       for (let i = me[slot].length; i < want; i++) {
-        const id = drawCard(deck, isDef, unlocked, reserved);
+        const id = drawCard(deck, isDef, unlocked, reserved, r.scenario);
         if (!id) break;
         reserved.push(id);
         send({ type: 'ADD_CARD', playerId: me.id, slot, card: handCard(id) });
@@ -332,7 +381,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     later(2500, () => {
       const r = roomRef.current;
       if (!r || !player(botId)) return;
-      const cardId = slot === 'action' ? randomActionCard(r.mode) : randomDefenseCard(r.mode);
+      const cardId = slot === 'action' ? randomActionCard(r.mode, r.scenario) : randomDefenseCard(r.mode, r.scenario);
       send({ type: 'REPLACE_CARD', playerId: botId, uid: cardUid, card: handCard(cardId) });
     });
   };
@@ -352,10 +401,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   });
 
   /** Aplica el efecto de la carta sobre el objetivo (la víctima cumple). */
-  const applyComply = (play: TablePlay, propagate: boolean, durationFactor = 1) => {
+  const applyComply = (play: TablePlay, propagate: boolean, durationFactor = 1, verified = false) => {
     const target = player(play.toId);
     if (!target) return;
     const card = getCard(play.cardId);
+
+    // Modo Online: antes de aplicar el efecto, la víctima sube una prueba y la sala vota.
+    if (roomRef.current?.environment === 'ONLINE' && !verified && !target.isBot && !card.special) {
+      send({
+        type: 'PATCH_PLAY',
+        playId: play.id,
+        patch: {
+          status: 'evidence',
+          evidenceUntil: Date.now() + EVIDENCE_SECONDS * 1000,
+          pending: { propagate, durationFactor },
+          votes: {},
+        },
+      });
+      log(`📸 ${says(target.id, 'tiene', 'tenés')} 2 minutos para mostrar la prueba de «${card.name}».`, 'system');
+      return;
+    }
+
     send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'complied' });
 
     if (card.special === 'LOOTER') {
@@ -636,7 +702,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const confirmHot = () => setSettings((s) => ({ ...s, hotConfirmed: true, mode: 'hot' }));
 
   /** Arma un jugador humano con su mano repartida desde su mazo semanal. */
-  const buildMe = (mode: GameMode, tableSize: number): Player => {
+  const buildMe = (mode: GameMode, tableSize: number, scenario: Scenario): Player => {
     const prof = profileRef.current;
     const deck = deckOf(mode);
     setDecks({ ...decksRef.current, [mode]: deck });
@@ -645,7 +711,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const reserved: string[] = [];
     const deal = (def: boolean) =>
       Array.from({ length: def ? size.defenses : size.actions }, () => {
-        const id = drawCard(deck, def, unlocked, reserved);
+        const id = drawCard(deck, def, unlocked, reserved, scenario);
         if (id) reserved.push(id);
         return id;
       })
@@ -662,10 +728,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
-  const baseRoom = (code: string, mode: GameMode, kind: Room['kind'], players: Player[]): Room => ({
+  const baseRoom = (
+    code: string,
+    mode: GameMode,
+    kind: Room['kind'],
+    players: Player[],
+    environment: Environment,
+    scenario: Scenario,
+  ): Room => ({
     code,
     createdAt: Date.now(),
     mode,
+    environment,
+    scenario,
     kind,
     hostId: profileRef.current.id,
     botAuto: false,
@@ -696,9 +771,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     transportRef.current.disconnect();
     transportRef.current = createLocalTransport();
     const mode = settings.mode;
+    const environment = settings.environment;
+    const scenario: Scenario = environment === 'ONLINE' ? 'REMOTE' : settings.scenario;
     const botCount = Math.max(1, Math.min(bots, MAX_PLAYERS[mode] - 1));
     const total = kind === 'bots' ? botCount + 1 : 1;
-    const me = buildMe(mode, total);
+    const me = buildMe(mode, total, scenario);
 
     if (kind === 'bots') {
       const size = handSizeFor(total);
@@ -711,16 +788,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         color: AVATAR_COLORS[(AVATAR_COLORS.indexOf(me.color) + i + 1) % AVATAR_COLORS.length],
         isBot: true,
         isMe: false,
-        actions: Array.from({ length: size.actions }, () => handCard(randomActionCard(mode))),
-        defenses: Array.from({ length: size.defenses }, () => handCard(randomDefenseCard(mode))),
+        actions: Array.from({ length: size.actions }, () => handCard(randomActionCard(mode, scenario))),
+        defenses: Array.from({ length: size.defenses }, () => handCard(randomDefenseCard(mode, scenario))),
       }));
-      const r = baseRoom(roomCode(), mode, 'bots', [me, ...botPlayers]);
+      const r = baseRoom(roomCode(), mode, 'bots', [me, ...botPlayers], environment, scenario);
       send({ type: 'SET_ROOM', room: r });
       return r.code;
     }
 
     for (let attempt = 0; attempt < 4; attempt++) {
-      const r = baseRoom(roomCode(), mode, 'friends', [me]);
+      const r = baseRoom(roomCode(), mode, 'friends', [me], environment, scenario);
       const res = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -748,11 +825,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       throw new Error(r.mode === 'hot' ? 'Esa sala HOT ya tiene a la pareja completa' : 'La sala está llena (12 jugadores)');
     }
     clearTimers();
-    setSettings((s) => ({ ...s, mode: r.mode }));
+    setSettings((s) => ({
+      ...s,
+      mode: r.mode,
+      environment: r.environment,
+      scenario: r.scenario === 'REMOTE' ? s.scenario : r.scenario,
+    }));
     setRoom(r);
     connect(r);
     if (!r.players.some((p) => p.id === profileRef.current.id)) {
-      const me = buildMe(r.mode, r.players.length + 1);
+      const me = buildMe(r.mode, r.players.length + 1, r.scenario);
       send({ type: 'ADD_PLAYER', player: me });
       log(`👋 ${me.name} se sumó a la mesa.`, 'system');
     }
@@ -788,8 +870,133 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   /** Checkout simulado: destraba las 20 PRO del modo para siempre. */
   const buyPack = (mode: GameMode) => {
     const u = ensureUnlocks(unlocksRef.current);
-    if (!u.packs.includes(mode)) setUnlocks({ ...u, packs: [...u.packs, mode] });
+    if (!u.packs.includes(mode)) {
+      setUnlocks({ ...u, packs: [...u.packs, mode] });
+      recordPurchase('pack', PRICES.pack, mode);
+    }
   };
+
+  /* ---------------- economía: re-barajar y recargar ---------------- */
+
+  /** Reemplaza las cartas listas de mi mano por otras nuevas (sin quemar nada). */
+  const redealReady = (opts: { all?: boolean; allowBurned?: boolean }) => {
+    const r = roomRef.current;
+    const me = r?.players.find((p) => p.isMe);
+    if (!r || !me) return 0;
+    const deck = deckOf(r.mode);
+    const unlocked = unlockedNow();
+    const reserved = [...me.actions, ...me.defenses].map((c) => c.cardId);
+    let changed = 0;
+    for (const [slot, isDef] of [['actions', false], ['defenses', true]] as const) {
+      for (const c of me[slot]) {
+        if (!opts.all && c.state !== 'ready') continue;
+        const id = drawCard(deck, isDef, unlocked, reserved, r.scenario, opts.allowBurned);
+        if (!id) continue;
+        reserved.push(id);
+        send({ type: 'REPLACE_CARD', playerId: me.id, uid: c.uid, card: handCard(id) });
+        changed++;
+      }
+    }
+    // Si la mesa pide más cartas de las que tengo, completo.
+    const size = handSizeFor(r.players.length);
+    for (const [slot, isDef, want] of [
+      ['actions', false, size.actions],
+      ['defenses', true, size.defenses],
+    ] as const) {
+      for (let i = me[slot].length; i < want; i++) {
+        const id = drawCard(deck, isDef, unlocked, reserved, r.scenario, opts.allowBurned);
+        if (!id) break;
+        reserved.push(id);
+        send({ type: 'ADD_CARD', playerId: me.id, slot, card: handCard(id) });
+        changed++;
+      }
+    }
+    return changed;
+  };
+
+  const reshuffleHand: GameContextValue['reshuffleHand'] = (paid = false) => {
+    const r = roomRef.current;
+    if (!r) return false;
+    const e = ensureEconomy(economyRef.current);
+    if (!paid && e.weeklyReshufflesRemaining <= 0) return false;
+    if (!redealReady({})) return false;
+    if (paid) recordPurchase('reshuffle', PRICES.reshuffle, r.mode);
+    else setEconomy({ ...e, weeklyReshufflesRemaining: e.weeklyReshufflesRemaining - 1 });
+    log(`🔄 ${says(meId(), 're-barajó', 're-barajaste')} su mano${paid ? ' (extra)' : ''}.`, 'system');
+    return true;
+  };
+
+  const rechargeHand = () => {
+    const r = roomRef.current;
+    if (!r) return;
+    const size = handSizeFor(r.players.length);
+    const cards = size.actions + size.defenses;
+    redealReady({ all: true, allowBurned: true });
+    setDecks({ ...decksRef.current, [r.mode]: addBurns(deckOf(r.mode), cards) });
+    recordPurchase('recharge', rechargePrice(cards), r.mode);
+    log(`⚡ ${says(meId(), 'recargó', 'recargaste')} la mano: ${cards} cartas nuevas.`, 'system');
+  };
+
+  /* ---------------- Modo Online: prueba + votación ---------------- */
+
+  const submitEvidence: GameContextValue['submitEvidence'] = (playId, ev) => {
+    const play = getPlay(playId);
+    if (!play || play.status !== 'evidence' || play.toId !== meId()) return;
+    send({ type: 'PATCH_PLAY', playId, patch: { evidence: { ...ev, at: Date.now() } } });
+    log(`📸 ${says(meId(), 'subió', 'subiste')} la prueba de «${getCard(play.cardId).name}». ¡A votar!`, 'system');
+  };
+
+  const voteEvidence: GameContextValue['voteEvidence'] = (playId, vote) => {
+    const play = getPlay(playId);
+    if (!play || play.status !== 'evidence' || play.toId === meId()) return;
+    send({ type: 'VOTE', playId, playerId: meId(), vote });
+  };
+
+  /** La víctima resuelve su propia votación (un solo dispositivo decide, sin carreras). */
+  const evidenceTick = useRef<() => void>(() => {});
+  const botVotes = useRef(new Set<string>());
+  evidenceTick.current = () => {
+    const r = roomRef.current;
+    if (!r || r.environment !== 'ONLINE') return;
+    const now = Date.now();
+    for (const play of r.table) {
+      if (play.status !== 'evidence' || play.toId !== meId()) continue;
+      const card = getCard(play.cardId);
+      const fail = (why: string) => {
+        send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'refused' });
+        log(`👎 ${why} «${card.name}» → Ruleta.`, 'punish');
+        pushRoulette(play.toId!, `No convenció con «${card.name}»`);
+      };
+      if (!play.evidence) {
+        if (now > (play.evidenceUntil ?? 0)) fail(`${says(play.toId, 'no mostró', 'no mostraste')} la prueba de`);
+        continue;
+      }
+      const voters = r.players.filter((p) => p.id !== play.toId);
+      // Bots (modo prueba) votan solos.
+      for (const b of voters.filter((p) => p.isBot && !play.votes?.[p.id])) {
+        const key = `${play.id}:${b.id}`;
+        if (botVotes.current.has(key)) continue;
+        botVotes.current.add(key);
+        later(1200 + Math.random() * 1500, () =>
+          send({ type: 'VOTE', playId: play.id, playerId: b.id, vote: Math.random() < 0.8 ? 'yes' : 'no' }),
+        );
+      }
+      const votes = Object.values(play.votes ?? {});
+      const done = votes.length >= voters.length || now > play.evidence.at + VOTE_SECONDS * 1000;
+      if (!done) continue;
+      const yes = votes.filter((v) => v === 'yes').length;
+      const no = votes.length - yes;
+      if (no > yes) fail(`La sala dice que ${says(play.toId, 'no cumplió', 'no cumpliste')}`);
+      else {
+        log(`👍 La sala aprobó: ${says(play.toId, 'cumplió', 'cumpliste')} «${card.name}» (${yes} a ${no}).`, 'info');
+        applyComply(play, play.pending?.propagate ?? true, play.pending?.durationFactor ?? 1, true);
+      }
+    }
+  };
+  useEffect(() => {
+    const t = setInterval(() => evidenceTick.current(), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   /** Reto cumplido: la carta PRO queda habilitada hasta el lunes. */
   const unlockWithChallenge = (cardId: string) => {
@@ -890,7 +1097,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!bot || !me || !r) return;
     if (isGagged(bot)) return log(`🤐 ${bot.name} está amordazado y no puede atacar.`, 'system');
     const slot = readyCards(bot.actions)[0];
-    const chosen = cardId ?? slot?.cardId ?? randomActionCard(r.mode);
+    const chosen = cardId ?? slot?.cardId ?? randomActionCard(r.mode, r.scenario);
     const card = getCard(chosen);
     if (!card.targetMode || card.targetMode === 'single') {
       if (isImmune(me)) return log(`🏛️ ${bot.name} intentó atacarte, pero sos intocable.`, 'defense');
@@ -909,7 +1116,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!bot || !me || !r) return;
     if (isImmune(me)) return log(`🏛️ ${bot.name} quiso amordazarte, pero sos intocable.`, 'defense');
     const slot = readyCards(bot.defenses)[0];
-    const def = slot?.cardId ?? randomDefenseCard(r.mode);
+    const def = slot?.cardId ?? randomDefenseCard(r.mode, r.scenario);
     if (slot) {
       send({ type: 'SET_CARD_STATE', playerId: bot.id, uid: slot.uid, state: 'used' });
       refillBot(bot.id, slot.uid, 'defense');
@@ -920,6 +1127,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setBotAuto = (value: boolean) => send({ type: 'SET_BOT_AUTO', value });
+  const setEnvironment = (environment: Environment) => setSettings((s) => ({ ...s, environment }));
+  const setScenario = (scenario: Scenario) => setSettings((s) => ({ ...s, scenario }));
 
   // Bots autónomos: cada ~12s un bot puede tirar una carta a alguien.
   const autoRef = useRef<() => void>(() => {});
@@ -975,6 +1184,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setName,
     setMode,
     confirmHot,
+    setEnvironment,
+    setScenario,
+    economy,
+    reshuffleHand,
+    rechargeHand,
+    submitEvidence,
+    voteEvidence,
     createRoom,
     joinRoom,
     leaveRoom,

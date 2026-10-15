@@ -28,14 +28,18 @@ Todos en el mismo wifi abren `http://<IP>:3000`. Uno toca **Crear sala** y compa
 
 | Regla | Dónde |
 | --- | --- |
-| **100 cartas**: 50 Clásico + 50 HOT, cada modo con **30 activas + 20 PRO** | `src/data/cards-catalog.ts` |
-| Mano por sala: **2–6 jugadores → 2 Acción + 1 Escudo** · **7–12 → 3 Acción + 2 Escudos** | `handSizeFor()` |
-| **10 usos por semana** por modo; cada carta quemada no vuelve hasta el lunes 00:00 | `src/lib/deck.ts` (`weeklyBurnsRemaining`, `burnedIds`) |
-| Cartas **PRO**: se destraban comprando el pack (checkout simulado, permanente) o cumpliendo un reto (hasta el lunes) | `UnlockCardModal`, `unlockedCardIds()` |
-| Sólo salen en el reparto cartas `!isLocked` o desbloqueadas | `drawCard()` |
-| Defensas reactivas (60 s), Mordaza activa (20 min), Contraataque Letal → Ruleta | `applyDefense()` / `gagPlayer()` |
-| **Modo HOT**: exclusivo parejas (salas de 2), retos privados y soft | `HOT_CATALOG`, `HOT_PUNISHMENTS` |
-| Salas: Clásico hasta 12 jugadores, HOT 2 | `MAX_PLAYERS`, `src/server/rooms.ts` |
+| **Configuración de sala**: Modo (Clásico / HOT) · Modalidad (Presencial / Online) · Escenario (🍔 Bar, 🏠 Casa, 🍾 Previa, 🧉 Libre; Online = 📱 Remoto) | `src/app/page.tsx`, `Room.environment/scenario` |
+| **100 cartas** (50 Clásico + 50 HOT, cada modo 30 activas + 20 PRO) con etiquetas de escenario | `src/data/cards-catalog.ts` |
+| Reparto filtrado por modo + escenario + desbloqueo + no quemada esta semana | `drawCard()` en `src/lib/deck.ts` |
+| Mano: **2–6 jugadores → 2 Acción + 1 Escudo** · **7–12 → 3 + 2** | `handSizeFor()` |
+| **10 usos por semana** por modo (reinicio lunes 00:00) | `weeklyBurnsRemaining` |
+| **Re-barajar mano**: 2 gratis por semana, después $0.50 (pago simulado) | `reshuffleHand()`, `Economy` |
+| **Recargar mano** al quedarse sin cartas o sin usos: $0.50 (mano de 3) / $0.83 (mano de 5); suma esos usos | `rechargeHand()` |
+| **Expansión PRO** $2.00 o prueba gratis con reto (hasta el lunes) | `CardPreviewModal` |
+| **Modo Online**: al cumplir, la víctima sube prueba (foto o texto, 120 s) y la sala vota 👍/👎; si pierde → Ruleta | `Evidence.tsx`, `evidenceTick` |
+| HOT: exclusivo parejas; en Online la prueba es sólo texto (las fotos no pasan por la app) | — |
+
+Todos los pagos son **simulados** (no se cobra nada): están listos para conectar un checkout real.
 
 ## Estructura
 

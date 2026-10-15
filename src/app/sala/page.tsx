@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bot, Copy, Flame, Home, Hourglass, ScrollText, LogOut, Share2, Users, WifiOff } from 'lucide-react';
-import { WEEKLY_BURNS, getCard, handSizeFor } from '@/data/cards-catalog';
+import { PRICES, SCENARIO_META, WEEKLY_BURNS, formatUSD, getCard, handSizeFor, rechargePrice } from '@/data/cards-catalog';
+import { PayModal } from '@/components/PayModal';
+import { EvidenceModal, EvidencePanel } from '@/components/room/Evidence';
 import { isGagged, isImmune, useGame, useNow } from '@/context/GameContext';
 import { CardFocus, HandDock, type Focus } from '@/components/room/HandDock';
 import { IncomingModal } from '@/components/room/IncomingModal';
@@ -31,6 +33,7 @@ export default function SalaPage() {
   const [botSheet, setBotSheet] = useState<Player | null>(null);
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [pay, setPay] = useState<'reshuffle' | 'recharge' | null>(null);
   const [seenLog, setSeenLog] = useState(0);
   useEffect(() => {
     if (logOpen && room) setSeenLog(room.log.length);
@@ -71,12 +74,16 @@ export default function SalaPage() {
     ...room.roulettes.map((r) => r.playerId),
     ...(room.rps ? [room.rps.attackerId, room.rps.defenderId] : []),
     ...room.table.filter((t) => t.status === 'pending' && t.toId).map((t) => t.toId!),
+    ...room.table.filter((t) => t.status === 'evidence' && t.toId).map((t) => t.toId!),
   ]);
   const blockingOverlay = !!(rps || incoming || roulette);
   const n = room.players.length;
   const hand = handSizeFor(n);
   const budget = game.deck.weeklyBurnsRemaining;
   const noBudget = budget <= 0;
+  const handCards = hand.actions + hand.defenses;
+  const rechargeCost = rechargePrice(handCards);
+  const myEvidence = room.table.find((t) => t.status === 'evidence' && t.toId === me.id && !t.evidence) ?? null;
   const armedCard = armed ? getCard(armed.cardId) : null;
 
   const handleThrow = () => {
@@ -210,6 +217,9 @@ export default function SalaPage() {
             <Users size={11} strokeWidth={3} /> Mesa de {n}: {hand.actions} Acción + {hand.defenses} Escudo
             {hand.defenses > 1 ? 's' : ''}
           </Pill>
+          <Pill className="bg-panel text-white">
+            {SCENARIO_META[room.scenario].emoji} {SCENARIO_META[room.scenario].label}
+          </Pill>
           <Pill className={noBudget ? 'bg-special text-white' : 'bg-cream text-black'}>
             <Flame size={11} strokeWidth={3} /> Usos {budget}/{WEEKLY_BURNS}
           </Pill>
@@ -250,12 +260,24 @@ export default function SalaPage() {
             Esperando a {Array.from(new Set(waitingOn)).join(', ')}…
           </div>
         )}
+        <EvidencePanel room={room} meId={me.id} now={now} onVote={game.voteEvidence} />
         <TableZone room={room} />
       </div>
 
       {/* Mano */}
       <div className="shrink-0">
-        <HandDock me={me} gagged={gagged} noBudget={noBudget} onFocus={setFocus} />
+        <HandDock
+          me={me}
+          gagged={gagged}
+          noBudget={noBudget}
+          onFocus={setFocus}
+          reshufflesLeft={game.economy.weeklyReshufflesRemaining}
+          onReshuffle={() => {
+            if (!game.reshuffleHand()) setPay('reshuffle');
+          }}
+          rechargeLabel={formatUSD(rechargeCost)}
+          onRecharge={() => setPay('recharge')}
+        />
       </div>
 
       {/* Capas */}
@@ -316,11 +338,31 @@ export default function SalaPage() {
       <BotSheet
         bot={botSheet ? room.players.find((p) => p.id === botSheet.id) ?? null : null}
         mode={room.mode}
+        scenario={room.scenario}
         now={now}
         meImmune={immune}
         onClose={() => setBotSheet(null)}
         onAttack={(cardId) => botSheet && game.simulateBotAttack(botSheet.id, cardId)}
         onGag={() => botSheet && game.simulateBotGag(botSheet.id)}
+      />
+
+      <PayModal
+        open={pay === 'reshuffle'}
+        title="🔄 Re-barajado extra"
+        description="Ya usaste tus 2 cambios de mano gratis de esta semana. Esperá al lunes o desbloqueá un re-barajado extra ahora."
+        item="Re-barajar mano"
+        usd={PRICES.reshuffle}
+        onPay={() => game.reshuffleHand(true)}
+        onClose={() => setPay(null)}
+      />
+      <PayModal
+        open={pay === 'recharge'}
+        title="⚡ Recargar mano"
+        description={`Te reparte una mano nueva completa (${hand.actions} Acción + ${hand.defenses} Escudo${hand.defenses > 1 ? 's' : ''}) y te suma ${handCards} usos esta semana.`}
+        item={`Mano de ${handCards} cartas`}
+        usd={rechargeCost}
+        onPay={() => game.rechargeHand()}
+        onClose={() => setPay(null)}
       />
 
       {rps ? (
@@ -334,6 +376,14 @@ export default function SalaPage() {
           noBudget={noBudget}
           onRespond={(choice, opts) => game.respondIncoming(incoming.id, choice, opts)}
           onExpire={onExpire}
+        />
+      ) : myEvidence ? (
+        <EvidenceModal
+          key={myEvidence.id}
+          play={myEvidence}
+          room={room}
+          now={now}
+          onSubmit={(ev) => game.submitEvidence(myEvidence.id, ev)}
         />
       ) : roulette ? (
         <RouletteModal
