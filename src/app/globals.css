@@ -28,6 +28,11 @@
   --pattern-size: 120px 120px, 100% 100%;
 }
 
+/* Escala general un 5% más compacta (todo lo que usa rem). */
+html {
+  font-size: 95%;
+}
+
 html,
 body {
   background-color: rgb(var(--c-bg));

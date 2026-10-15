@@ -65,6 +65,13 @@ export default function SalaPage() {
     ...room.incoming.filter((i) => i.targetId !== me.id).map((i) => nameOf(i.targetId)),
     ...room.roulettes.filter((r) => r.playerId !== me.id && r !== roulette).map((r) => nameOf(r.playerId)),
   ];
+  // A quién "le toca": quien tiene que defenderse/cumplir, jugar PPT o girar la ruleta.
+  const acting = new Set<string>([
+    ...room.incoming.map((i) => i.targetId),
+    ...room.roulettes.map((r) => r.playerId),
+    ...(room.rps ? [room.rps.attackerId, room.rps.defenderId] : []),
+    ...room.table.filter((t) => t.status === 'pending' && t.toId).map((t) => t.toId!),
+  ]);
   const blockingOverlay = !!(rps || incoming || roulette);
   const n = room.players.length;
   const hand = handSizeFor(n);
@@ -162,6 +169,7 @@ export default function SalaPage() {
       <PlayersBar
         players={room.players}
         now={now}
+        acting={acting}
         onSelect={(p) => {
           if (p.isBot && room.kind === 'bots' && !blockingOverlay) setBotSheet(p);
         }}

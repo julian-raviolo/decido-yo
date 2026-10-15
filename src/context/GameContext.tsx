@@ -179,8 +179,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     timers.current.clear();
   }, []);
 
-  const log = (text: string, tone: LogEntry['tone'] = 'info') =>
-    send({ type: 'LOG', entry: { id: uid('l_'), at: Date.now(), text, tone } });
+  const log = (text: string, tone: LogEntry['tone'] = 'info', cardId?: string) =>
+    send({ type: 'LOG', entry: { id: uid('l_'), at: Date.now(), text, tone, ...(cardId ? { cardId } : {}) } });
 
   const player = (id: string | null | undefined) => roomRef.current?.players.find((p) => p.id === id);
   /**
@@ -365,7 +365,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Se quema (no vuelve hasta el lunes) pero no gasta el presupuesto de la víctima.
         if (target.isMe) burn(victim.cardId, false);
         send({ type: 'SET_CARD_STATE', playerId: target.id, uid: victim.uid, state: 'looted' });
-        log(`🔥 ${says(play.fromId, 'saqueó', 'saqueaste')} la carta de Acción de ${objOf(target.id)}.`, 'attack');
+        log(`🔥 ${says(play.fromId, 'saqueó', 'saqueaste')} la carta de Acción de ${objOf(target.id)}.`, 'attack', play.cardId);
         if (target.isBot) refillBot(target.id, victim.uid, 'action');
       } else {
         log(`${nameOf(target.id)} no tenía carta de Acción para saquear.`, 'info');
@@ -480,7 +480,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (def && Math.random() < 0.55) {
       const card = getCard(def.cardId);
       send({ type: 'SET_CARD_STATE', playerId: bot.id, uid: def.uid, state: 'used' });
-      log(`🛡️ ${bot.name} responde con «${card.name}».`, 'defense');
+      log(`🛡️ ${bot.name} responde con «${card.name}».`, 'defense', card.id);
       refillBot(bot.id, def.uid, 'defense');
       applyDefense(play, bot.id, card.defenseEffect!, card.id);
     } else {
@@ -600,13 +600,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const text = ruleText?.trim() || pickRandom(r.mode === 'hot' ? HOT_BOT_RULES : BOT_RULES);
       send({ type: 'ADD_PLAY', play: { ...newPlay(card.id, fromId, null, text), status: 'rule' } });
       send({ type: 'ADD_RULE', rule: { id: uid('rule_'), text, byId: fromId } });
-      log(`⚖️ ${says(fromId, 'impone', 'imponés')} una regla: «${text}».`, 'attack');
+      log(`⚖️ ${says(fromId, 'impone', 'imponés')} una regla: «${text}».`, 'attack', card.id);
       return;
     }
     if (card.special === 'RUSSIAN_ROULETTE') {
       const victim = pickRandom(r.players);
       send({ type: 'ADD_PLAY', play: { ...newPlay(card.id, fromId, victim.id), status: 'roulette' } });
-      log(`🎲 «${card.name}» de ${objOf(fromId)}… ¡le tocó a ${objOf(victim.id)}!`, 'punish');
+      log(`🎲 «${card.name}» de ${objOf(fromId)}… ¡le tocó a ${objOf(victim.id)}!`, 'punish', card.id);
       pushRoulette(victim.id, card.name);
       return;
     }
@@ -618,7 +618,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
     const play = newPlay(card.id, fromId, target.id);
     send({ type: 'ADD_PLAY', play });
-    log(`⚡ ${says(fromId, 'le tira', 'le tirás')} «${card.name}» a ${objOf(target.id)}.`, 'attack');
+    log(`⚡ ${says(fromId, 'le tira', 'le tirás')} «${card.name}» a ${objOf(target.id)}.`, 'attack', card.id);
     deliverAttack(play);
   };
 
@@ -817,7 +817,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     send({ type: 'SET_CARD_STATE', playerId: me.id, uid: slot.uid, state: 'used' });
     send({ type: 'PATCH_PLAYER', playerId: target.id, patch: { gaggedUntil: Date.now() + GAG_MINUTES * MIN } });
     send({ type: 'ADD_PLAY', play: { ...newPlay(slot.cardId, me.id, target.id, 'Mordaza'), status: 'gag' } });
-    log(`🤐 Mordaza: ${target.name} no puede usar su Acción por ${GAG_MINUTES} min.`, 'defense');
+    log(`🤐 Mordaza: ${target.name} no puede usar su Acción por ${GAG_MINUTES} min.`, 'defense', slot.cardId);
   };
 
   const respondIncoming: GameContextValue['respondIncoming'] = (id, choice, opts = {}) => {
@@ -834,7 +834,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const def = getCard(slot.cardId);
         burn(def.id);
         send({ type: 'SET_CARD_STATE', playerId: me.id, uid: slot.uid, state: 'used' });
-        log(`🛡️ ${says(me.id, 'juega', 'jugaste')} «${def.name}».`, 'defense');
+        log(`🛡️ ${says(me.id, 'juega', 'jugaste')} «${def.name}».`, 'defense', def.id);
         applyDefense(play, me.id, def.defenseEffect!, def.id, opts.redirectTo);
         return;
       }
@@ -916,7 +916,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
     send({ type: 'PATCH_PLAYER', playerId: me.id, patch: { gaggedUntil: Date.now() + GAG_MINUTES * MIN } });
     send({ type: 'ADD_PLAY', play: { ...newPlay(def, bot.id, me.id, 'Mordaza'), status: 'gag' } });
-    log(`🤐 ${bot.name} te amordazó: tu Acción queda bloqueada ${GAG_MINUTES} min.`, 'attack');
+    log(`🤐 ${bot.name} te amordazó: tu Acción queda bloqueada ${GAG_MINUTES} min.`, 'attack', def);
   };
 
   const setBotAuto = (value: boolean) => send({ type: 'SET_BOT_AUTO', value });

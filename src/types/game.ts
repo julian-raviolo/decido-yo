@@ -161,6 +161,8 @@ export interface LogEntry {
   at: number;
   text: string;
   tone: 'info' | 'attack' | 'defense' | 'punish' | 'system';
+  /** Carta involucrada: el historial muestra su efecto. */
+  cardId?: string;
 }
 
 export interface Room {

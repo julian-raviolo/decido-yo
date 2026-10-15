@@ -78,30 +78,42 @@ export default function HomePage() {
   return (
     <div className="flex flex-1 flex-col gap-5 pb-6">
       {/* Hero */}
-      <header className="relative pt-4">
-        <div className="pointer-events-none absolute -right-2 top-0 flex">
+      <header className="relative pt-9">
+        <div className="pointer-events-none absolute -right-2 top-3 flex">
           <motion.div key={`a-${mode}`} initial={{ rotate: 0, y: 20 }} animate={{ rotate: 14, y: 0 }} className="origin-bottom">
-            <GameCard cardId={hot ? 'hot-mirada-intimidante' : 'sommelier-del-caos'} size="mini" />
+            <GameCard cardId={hot ? 'hot-mirada-intimidante' : 'sommelier-del-caos'} size="md" />
           </motion.div>
           <motion.div
             key={`b-${mode}`}
             initial={{ rotate: 0, y: 20 }}
             animate={{ rotate: -10, y: 8 }}
-            className="-ml-10 origin-bottom"
+            className="-ml-11 origin-bottom"
           >
-            <GameCard cardId={hot ? 'hot-tension-acumulada' : 'decido-yo-que-no'} size="mini" />
+            <GameCard cardId={hot ? 'hot-tension-acumulada' : 'decido-yo-que-no'} size="md" />
           </motion.div>
         </div>
-        <p className="text-[11px] font-black uppercase tracking-[0.25em] text-lime">
-          {hot ? 'Edición HOT · ángel o diablo' : 'Party card game'}
-        </p>
-        <h1 className="relative mt-1 font-display text-[64px] font-black uppercase leading-[0.85] tracking-tighter text-cream">
-          {hot && (
-            <svg width="70" height="18" viewBox="0 0 100 26" className="absolute -top-3 left-1" aria-hidden>
-              <ellipse cx="50" cy="13" rx="44" ry="8" fill="none" stroke="#FFD166" strokeWidth="6" />
-            </svg>
-          )}
-          Decido
+        {!hot && (
+          <p className="text-[11px] font-black uppercase tracking-[0.25em] text-lime">Party card game</p>
+        )}
+        <h1
+          className={`relative font-display text-[61px] font-black uppercase leading-[0.85] tracking-tighter text-cream ${
+            hot ? 'mt-4' : 'mt-1'
+          }`}
+        >
+          <span className="relative inline-block">
+            {hot && (
+              <>
+                {/* Aureola sobre la "D" y el lema a la derecha, para que respire */}
+                <svg width="70" height="18" viewBox="0 0 100 26" className="absolute -top-4 left-0" aria-hidden>
+                  <ellipse cx="50" cy="13" rx="44" ry="8" fill="none" stroke="#FFD166" strokeWidth="6" />
+                </svg>
+                <span className="absolute -top-5 right-0 font-sans text-[11px] font-black tracking-[0.25em] text-lime">
+                  Ángel o diablo
+                </span>
+              </>
+            )}
+            Decido
+          </span>
           <br />
           <span className="relative inline-block -rotate-2 rounded-2xl border-4 border-black bg-social px-3 text-black shadow-brutal-cream">
             {hot && (
@@ -115,7 +127,7 @@ export default function HomePage() {
         </h1>
         <p className="mt-4 max-w-[300px] text-sm font-semibold text-white/80">
           {hot
-            ? 'Tentaciones soft para citas y juntadas. El diablo propone, el ángel te salva.'
+            ? 'Tentaciones para jugar en pareja: el diablo propone, el ángel salva.'
             : 'Las cartas deciden la salida: qué se pide, a dónde van y quién paga el castigo.'}
         </p>
       </header>

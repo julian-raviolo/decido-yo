@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { GameCard } from '@/components/GameCard';
-import { getCard } from '@/data/cards-catalog';
+import { cardMeta, getCard, hasCard } from '@/data/cards-catalog';
 import type { PlayStatus, Room } from '@/types/game';
 
 const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
@@ -115,21 +115,41 @@ export function LogFeed({ room }: { room: Room }) {
   };
   return (
     <ul className="flex min-h-[72px] flex-[2] flex-col gap-1.5 overflow-y-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <li className="sticky top-0 z-10 bg-night/90 px-1 py-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-white/50 backdrop-blur-sm">
-        Historial
-      </li>
       <AnimatePresence initial={false}>
-        {room.log.slice(0, 30).map((l) => (
-          <motion.li
-            key={l.id}
-            layout
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`rounded-lg border-l-4 bg-white/5 px-2.5 py-1.5 text-[12px] font-semibold leading-snug text-white/90 ${TONE[l.tone]}`}
-          >
-            {l.text}
-          </motion.li>
-        ))}
+        {room.log.slice(0, 30).map((l) => {
+          const card = l.cardId && hasCard(l.cardId) ? getCard(l.cardId) : null;
+          const meta = card ? cardMeta(card) : null;
+          const Icon = card?.icon;
+          return (
+            <motion.li
+              key={l.id}
+              layout
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`rounded-lg border-l-4 bg-white/5 px-2.5 py-1.5 text-[12px] font-semibold leading-snug text-white/90 ${TONE[l.tone]}`}
+            >
+              {l.text}
+              {card && meta && Icon && (
+                /* Efecto de la carta, para entender qué pasó sin tener que conocerla */
+                <div className="mt-1.5 flex items-start gap-2 rounded-xl border-2 border-black bg-cream p-1.5 text-black">
+                  <span
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 border-black"
+                    style={{ backgroundColor: meta.color, color: meta.text }}
+                  >
+                    <Icon size={15} strokeWidth={2.75} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11px] font-black uppercase leading-tight">
+                      {card.name}
+                      {card.durationMin ? <span className="ml-1 font-mono text-black/60">· {card.durationMin} min</span> : null}
+                    </span>
+                    <span className="block text-[11.5px] font-semibold leading-snug text-black/80">{card.description}</span>
+                  </span>
+                </div>
+              )}
+            </motion.li>
+          );
+        })}
       </AnimatePresence>
     </ul>
   );

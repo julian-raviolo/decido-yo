@@ -33,38 +33,80 @@ export function HandDock({
   ];
   const total = me.actions.length + me.defenses.length;
   const compact = useShortScreen();
-  const size = compact ? 'md' : 'hand';
+  // Con más de 3 cartas: abanicos agrupados (cartas más chicas) y "vista previa" antes de elegir.
+  const fan = total > 3;
+  const size = fan || compact ? 'md' : 'hand';
+  const [preview, setPreview] = useState<string | null>(null);
+  const overlap = 42;
+
+  const all = [...me.actions, ...me.defenses];
+  useEffect(() => {
+    if (preview && !all.some((c) => c.uid === preview && c.state === 'ready')) setPreview(null);
+  }, [all, preview]);
+
+  const pick = (card: HandCard, slot: Slot) => {
+    if (card.state !== 'ready') return;
+    if (fan && preview !== card.uid) return setPreview(card.uid); // 1er toque: se acerca y se agranda
+    setPreview(null);
+    onFocus({ uid: card.uid, cardId: card.cardId, slot }); // 2do toque: elegir
+  };
 
   return (
     <div
-      className={`-mx-4 flex snap-x snap-mandatory items-end gap-3 overflow-x-auto px-4 pb-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-        total <= 3 ? 'justify-center' : ''
-      }`}
+      onClick={(e) => e.target === e.currentTarget && setPreview(null)}
+      className={`-mx-4 flex items-end gap-3 px-4 pb-1 ${
+        fan
+          ? 'justify-center overflow-visible pt-12'
+          : 'snap-x snap-mandatory overflow-x-auto pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+      } ${total <= 3 ? 'justify-center' : ''}`}
     >
       {groups.map(({ slot, title, cards, tint }, g) => (
         <div key={slot} className="flex shrink-0 items-end gap-3">
-          {g > 0 && <div className={`${compact ? 'h-[110px]' : 'h-[150px]'} w-[3px] shrink-0 self-center rounded-full bg-white/15`} aria-hidden />}
+          {g > 0 && (
+            <div
+              className={`${size === 'md' ? 'h-[110px]' : 'h-[150px]'} w-[3px] shrink-0 self-center rounded-full bg-white/15`}
+              aria-hidden
+            />
+          )}
           <div className="flex flex-col gap-1.5">
             <span className="flex items-center gap-1.5 pl-1 text-[10px] font-black uppercase tracking-widest text-white/70">
               <span className="h-2.5 w-2.5 rounded-full border-2 border-black" style={{ background: tint }} />
               {title} · {readyCount(cards)}/{cards.length}
             </span>
-            <div className="flex gap-2.5">
+            <div className={`relative flex ${fan ? '' : 'gap-2.5'}`}>
               {cards.length === 0 && <CardBack size={size} label="Sin cartas disponibles" />}
               {cards.map((card, i) => {
                 const usable = card.state === 'ready';
                 const gag = slot === 'action' && gagged;
                 const locked = usable && (gag || noBudget);
+                const mid = (cards.length - 1) / 2;
+                const isPreview = preview === card.uid;
+                const dimmed = fan && preview !== null && !isPreview;
                 return (
                   <motion.button
                     key={card.uid}
-                    onClick={() => usable && onFocus({ uid: card.uid, cardId: card.cardId, slot })}
-                    whileTap={usable ? { scale: 0.94, rotate: -2 } : undefined}
+                    onClick={() => pick(card, slot)}
+                    whileTap={usable ? { scale: fan ? 1.08 : 0.94 } : undefined}
                     initial={{ y: 40, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ type: 'spring', damping: 18, stiffness: 220, delay: (g * 3 + i) * 0.05 }}
-                    className="shrink-0 snap-start rounded-[1.4rem]"
+                    animate={
+                      fan
+                        ? {
+                            opacity: dimmed ? 0.75 : 1,
+                            y: isPreview ? -44 : Math.abs(i - mid) * 5 + (dimmed ? 6 : 0),
+                            rotate: isPreview ? 0 : (i - mid) * 7,
+                            scale: isPreview ? 1.45 : 1,
+                          }
+                        : { y: 0, opacity: 1 }
+                    }
+                    transition={{ type: 'spring', damping: 17, stiffness: 260, delay: preview ? 0 : (g * 3 + i) * 0.05 }}
+                    style={{
+                      marginLeft: fan && i > 0 ? -overlap : 0,
+                      zIndex: isPreview ? 50 : i,
+                      transformOrigin: '50% 100%',
+                    }}
+                    className={`relative shrink-0 rounded-[1.4rem] ${fan ? '' : 'snap-start'}`}
                     aria-label={`${title} ${i + 1}`}
+                    aria-pressed={fan ? isPreview : undefined}
                   >
                     <GameCard
                       cardId={card.cardId}
@@ -72,6 +114,15 @@ export function HandDock({
                       state={usable ? (locked ? 'locked' : 'ready') : 'burned'}
                       lockLabel={gag ? 'Amordazada' : 'Sin usos esta semana'}
                     />
+                    {isPreview && (
+                      <motion.span
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-black bg-lime px-1.5 py-0.5 text-[7px] font-black uppercase text-black shadow-brutal-sm"
+                      >
+                        Tocá de nuevo
+                      </motion.span>
+                    )}
                   </motion.button>
                 );
               })}
