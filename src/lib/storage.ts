@@ -30,6 +30,7 @@ export const storage = {
 export const STORAGE_KEYS = {
   profile: 'decido-yo:profile',
   settings: 'decido-yo:settings',
-  decks: 'decido-yo:weekly-decks-v2',
-  room: 'decido-yo:room-v2',
+  decks: 'decido-yo:weekly-decks-v3',
+  unlocks: 'decido-yo:unlocks',
+  room: 'decido-yo:room-v3',
 } as const;

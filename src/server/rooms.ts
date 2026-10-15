@@ -1,4 +1,5 @@
 import { roomReducer, type RoomAction, type Snapshot } from '@/lib/realtime';
+import { MAX_PLAYERS } from '@/data/cards-catalog';
 import type { Room } from '@/types/game';
 
 /**
@@ -17,7 +18,6 @@ const g = globalThis as unknown as { __decidoYoRooms?: Map<string, Entry> };
 const rooms = (g.__decidoYoRooms ??= new Map<string, Entry>());
 
 const TTL = 12 * 60 * 60 * 1000;
-const MAX_PLAYERS = 20;
 
 const sweep = () => {
   const now = Date.now();
@@ -68,7 +68,8 @@ export function applyActions(code: string, actions: RoomAction[]): Snapshot | nu
   let room: Room | null = entry.room;
   for (const a of actions) {
     if (!a || !ALLOWED.has(a.type)) continue;
-    if (a.type === 'ADD_PLAYER' && room && room.players.length >= MAX_PLAYERS) continue;
+    // Clásico hasta 12 jugadores; HOT es exclusivo de parejas (2).
+    if (a.type === 'ADD_PLAYER' && room && room.players.length >= MAX_PLAYERS[room.mode]) continue;
     room = roomReducer(room, a);
   }
   entry.version += 1;

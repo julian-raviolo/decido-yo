@@ -22,19 +22,20 @@ Todos en el mismo wifi abren `http://<IP>:3000`. Uno toca **Crear sala** y compa
 `/?sala=CODIGO`); los demás lo ponen en **Unirme**. La Mac hace de servidor: las salas viven en memoria
 (`src/server/rooms.ts`) y se sincronizan por Server-Sent Events. Si se reinicia el servidor, las salas se cierran.
 
-**Probar con bots** (sección chica del inicio) crea una sala local sólo en tu celular, con 1 a 14 bots.
+**Probar con bots** (sección chica del inicio) crea una sala local sólo en tu celular (1 a 11 bots en Clásico, 1 en HOT).
 
 ## Reglas
 
 | Regla | Dónde |
 | --- | --- |
-| Mazo semanal de **10 cartas** (7 Acción + 3 Defensa) sorteadas cada lunes del catálogo completo | `src/lib/deck.ts` |
-| Reparto 1+1 al entrar a una sala; sólo se quema lo que se usa | `buildMe()` / `burn()` |
-| Mesa de **5+**: 1 Acción extra, sólo después de quemar la anterior | efecto "reglas de mesa" en `GameContext` |
-| Mesa de **11+**: 2 Acción + 2 Defensa | `slotsFor()` |
-| Defensas reactivas (60 s) y Mordaza activa (20 min) | `applyDefense()` / `gagPlayer()` |
-| Ruleta de castigos / retos HOT | `RouletteModal`, `src/data/punishments.ts` |
-| **Modo HOT**: 20 cartas soft (15 Diablo + 5 Ángel), tema rojo | `HOT_CATALOG` en `src/data/cards-catalog.ts` |
+| **100 cartas**: 50 Clásico + 50 HOT, cada modo con **30 activas + 20 PRO** | `src/data/cards-catalog.ts` |
+| Mano por sala: **2–6 jugadores → 2 Acción + 1 Escudo** · **7–12 → 3 Acción + 2 Escudos** | `handSizeFor()` |
+| **10 usos por semana** por modo; cada carta quemada no vuelve hasta el lunes 00:00 | `src/lib/deck.ts` (`weeklyBurnsRemaining`, `burnedIds`) |
+| Cartas **PRO**: se destraban comprando el pack (checkout simulado, permanente) o cumpliendo un reto (hasta el lunes) | `UnlockCardModal`, `unlockedCardIds()` |
+| Sólo salen en el reparto cartas `!isLocked` o desbloqueadas | `drawCard()` |
+| Defensas reactivas (60 s), Mordaza activa (20 min), Contraataque Letal → Ruleta | `applyDefense()` / `gagPlayer()` |
+| **Modo HOT**: exclusivo parejas (salas de 2), retos privados y soft | `HOT_CATALOG`, `HOT_PUNISHMENTS` |
+| Salas: Clásico hasta 12 jugadores, HOT 2 | `MAX_PLAYERS`, `src/server/rooms.ts` |
 
 ## Estructura
 

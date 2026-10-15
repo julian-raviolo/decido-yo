@@ -1,21 +1,22 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Flame, Lock, Shield, Zap } from 'lucide-react';
-import { CATEGORY_META, getCard, isDefenseCard } from '@/data/cards-catalog';
+import { Crown, Flame, Lock, Shield, Zap } from 'lucide-react';
+import { cardMeta, getCard, isDefenseCard } from '@/data/cards-catalog';
 
-type Size = 'mini' | 'md' | 'sm' | 'lg';
+type Size = 'mini' | 'md' | 'hand' | 'sm' | 'lg';
 
 const SIZES: Record<Size, { box: string; circle: string; icon: number; title: string; pad: string }> = {
   mini: { box: 'w-[78px] h-[110px] rounded-2xl border-[3px]', circle: 'w-11 h-11 border-[3px]', icon: 22, title: 'text-[8px]', pad: 'p-1.5' },
   md: { box: 'w-[88px] h-[126px] rounded-2xl border-[3px]', circle: 'w-12 h-12 border-[3px]', icon: 24, title: 'text-[9px]', pad: 'p-1.5' },
+  hand: { box: 'w-[112px] h-[160px] rounded-[1.4rem] border-[3px]', circle: 'w-[58px] h-[58px] border-[3px]', icon: 30, title: 'text-[11px]', pad: 'p-2' },
   sm: { box: 'w-[150px] h-[212px] rounded-3xl border-4', circle: 'w-[74px] h-[74px] border-4', icon: 38, title: 'text-[13px]', pad: 'p-2.5' },
   lg: { box: 'w-[268px] h-[380px] rounded-3xl border-4', circle: 'w-[132px] h-[132px] border-4', icon: 68, title: 'text-2xl', pad: 'p-4' },
 };
 
 /** Aureola sutil (ángel) o cuernitos (diablo) sobre el círculo central. */
 function HotOrnament({ kind, size }: { kind: 'ANGEL' | 'DEVIL'; size: Size }) {
-  const w = size === 'lg' ? 96 : size === 'sm' ? 56 : 34;
+  const w = size === 'lg' ? 96 : size === 'sm' ? 56 : size === 'hand' ? 44 : 34;
   return kind === 'ANGEL' ? (
     <svg width={w} height={w * 0.28} viewBox="0 0 100 28" className="pointer-events-none -mb-1">
       <ellipse cx="50" cy="14" rx="44" ry="9" fill="none" stroke="#FFD166" strokeWidth="6" />
@@ -32,21 +33,24 @@ function HotOrnament({ kind, size }: { kind: 'ANGEL' | 'DEVIL'; size: Size }) {
 interface Props {
   cardId: string;
   size?: Size;
-  state?: 'ready' | 'burned' | 'locked';
+  /** locked = amordazada / sin presupuesto · pro = carta PRO bloqueada. */
+  state?: 'ready' | 'burned' | 'locked' | 'pro';
+  /** Texto del candado (por defecto "Amordazada"). */
+  lockLabel?: string;
   showDescription?: boolean;
   className?: string;
 }
 
-export function GameCard({ cardId, size = 'sm', state = 'ready', showDescription, className = '' }: Props) {
+export function GameCard({ cardId, size = 'sm', state = 'ready', lockLabel, showDescription, className = '' }: Props) {
   const card = getCard(cardId);
-  const meta = CATEGORY_META[card.category];
+  const meta = cardMeta(card);
   const s = SIZES[size];
   const Icon = card.icon;
   const isDefense = isDefenseCard(card);
   const describe = showDescription ?? size === 'lg';
   const small = size === 'mini' || size === 'md';
-  const hot = card.category === 'DEVIL' || card.category === 'ANGEL';
-  const stripe = card.category === 'DEVIL' ? '#FF1744' : card.category === 'ANGEL' ? '#FFD166' : '#000';
+  const hot = card.mode === 'hot';
+  const stripe = hot ? (isDefense ? '#FFD166' : '#FF1744') : '#000';
 
   return (
     <div
@@ -64,19 +68,37 @@ export function GameCard({ cardId, size = 'sm', state = 'ready', showDescription
         }}
       />
 
+      {card.isLocked && (
+        <span
+          className={`absolute z-30 flex items-center gap-0.5 rounded-full border-2 border-black bg-halo font-black uppercase text-black ${
+            small ? 'right-1 top-1 px-1 text-[7px]' : '-right-0.5 bottom-2 rotate-[-8deg] px-1.5 text-[9px]'
+          }`}
+        >
+          <Crown size={small ? 8 : 10} strokeWidth={3} /> PRO
+        </span>
+      )}
+
       {!small && (
         <div className="relative z-10 flex w-full items-center justify-between">
-          <span className="rounded-full border-2 border-black bg-black px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
+          <span
+            className={`truncate rounded-full border-2 border-black bg-black font-black uppercase tracking-wider text-white ${
+              size === 'hand' ? 'px-1.5 py-0.5 text-[7px]' : 'px-2 py-0.5 text-[9px]'
+            }`}
+          >
             {meta.label}
           </span>
-          <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-black bg-cream text-black">
+          <span
+            className={`grid shrink-0 place-items-center rounded-full border-2 border-black bg-cream text-black ${
+              size === 'hand' ? 'h-5 w-5' : 'h-6 w-6'
+            }`}
+          >
             {isDefense ? <Shield size={13} strokeWidth={3} /> : <Zap size={13} strokeWidth={3} />}
           </span>
         </div>
       )}
 
       <div className="relative z-10 flex flex-col items-center">
-        {hot && <HotOrnament kind={card.category as 'ANGEL' | 'DEVIL'} size={size} />}
+        {hot && <HotOrnament kind={isDefense ? 'ANGEL' : 'DEVIL'} size={size} />}
         <div className={`${s.circle} grid shrink-0 place-items-center rounded-full border-black bg-cream text-black`}>
           <Icon size={s.icon} strokeWidth={2.75} />
         </div>
@@ -118,8 +140,17 @@ export function GameCard({ cardId, size = 'sm', state = 'ready', showDescription
         <div className="absolute inset-0 z-20 grid place-items-center bg-black/60">
           <div className="flex flex-col items-center gap-1 text-white">
             <Lock size={small ? 20 : 34} strokeWidth={3} />
-            {!small && <span className="text-[11px] font-black uppercase">Amordazada</span>}
+            {!small && (
+              <span className="px-2 text-center text-[11px] font-black uppercase leading-tight">{lockLabel ?? 'Amordazada'}</span>
+            )}
           </div>
+        </div>
+      )}
+      {state === 'pro' && (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/55 backdrop-grayscale">
+          <span className="grid h-10 w-10 place-items-center rounded-full border-[3px] border-black bg-halo text-black shadow-brutal-sm">
+            <Lock size={18} strokeWidth={3} />
+          </span>
         </div>
       )}
     </div>
@@ -131,7 +162,7 @@ export function CardBack({ size = 'sm', label }: { size?: Size; label?: string }
   return (
     <div
       className={`${s.box} ${s.pad} relative grid place-items-center border-black bg-panel text-cream ${
-        size === 'mini' || size === 'md' ? 'shadow-brutal-sm' : 'shadow-brutal'
+        size === 'mini' || size === 'md' || size === 'hand' ? 'shadow-brutal-sm' : 'shadow-brutal'
       }`}
       style={{
         backgroundImage: 'radial-gradient(#ffffff22 1.5px, transparent 1.5px)',

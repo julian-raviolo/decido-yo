@@ -14,6 +14,7 @@ export function IncomingModal({
   players,
   me,
   now,
+  noBudget = false,
   onRespond,
   onExpire,
 }: {
@@ -21,6 +22,8 @@ export function IncomingModal({
   players: Player[];
   me: Player;
   now: number;
+  /** Sin usos semanales: los escudos no se pueden quemar. */
+  noBudget?: boolean;
   onRespond: (choice: 'defend' | 'comply' | 'refuse', opts?: { redirectTo?: string; defenseUid?: string }) => void;
   onExpire: () => void;
 }) {
@@ -41,14 +44,15 @@ export function IncomingModal({
   if (!incoming) return null;
   const card = getCard(incoming.cardId);
   const attacker = players.find((p) => p.id === incoming.fromId);
-  const defenses = readyCards(me.defenses);
+  const defenses = noBudget ? [] : readyCards(me.defenses);
   const canDefend = incoming.phase === 'defend' && defenses.length > 0 && !declined;
   const refusable = card.refusable !== false && !incoming.punishAfter;
-  const redirectTargets = players.filter((p) => !p.isMe && !isImmune(p, now));
+  // En citas de a 2, Chivo Expiatorio funciona como escudo normal.
+  const redirectTargets = players.length <= 2 ? [] : players.filter((p) => !p.isMe && !isImmune(p, now));
   const pct = Math.max(0, Math.min(1, remaining / DEFENSE_WINDOW_SECONDS));
 
   const useDefense = (slot: HandCard) => {
-    if (getCard(slot.cardId).defenseEffect === 'REDIRECT') setRedirectWith(slot);
+    if (getCard(slot.cardId).defenseEffect === 'REDIRECT' && redirectTargets.length) setRedirectWith(slot);
     else onRespond('defend', { defenseUid: slot.uid });
   };
 
@@ -73,6 +77,11 @@ export function IncomingModal({
               {attacker?.isMe ? 'Vuelve a vos' : `${attacker?.name ?? '¿?'} te tiró una carta`}
             </span>
           </div>
+          {noBudget && incoming.phase === 'defend' && readyCards(me.defenses).length > 0 && (
+            <p className="text-center text-xs font-bold uppercase text-social">
+              Gastaste tus 10 usos de la semana: no podés quemar escudos
+            </p>
+          )}
           {incoming.reason && (
             <p className="text-center text-xs font-bold uppercase text-social">{incoming.reason}</p>
           )}
@@ -111,7 +120,6 @@ export function IncomingModal({
                   <button
                     key={slot.uid}
                     onClick={() => useDefense(slot)}
-                    disabled={def.defenseEffect === 'REDIRECT' && redirectTargets.length === 0}
                     className="flex items-center gap-3 rounded-2xl border-[3px] border-black bg-defense p-2 text-left shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40"
                   >
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border-[3px] border-black bg-cream">

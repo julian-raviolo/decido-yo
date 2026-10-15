@@ -40,6 +40,8 @@ export function RpsModal({
   const myRole = me?.id === rps.defenderId ? 'defender' : 'attacker';
   const rival = myRole === 'defender' ? attacker : defender;
   const vsBot = !!rival?.isBot;
+  const defenseCard = rps.defenseCardId ? getCard(rps.defenseCardId) : null;
+  const penalty = defenseCard?.rpsLose === 'double' ? 'la carta por el doble de tiempo' : 'carta + castigo';
   const report = (r: 'win' | 'lose') => onResolve((myRole === 'defender') === (r === 'win'));
   const result: 'win' | 'lose' | 'tie' | null =
     mine && theirs ? (mine === theirs ? 'tie' : BEATS[mine] === theirs ? 'win' : 'lose') : null;
@@ -51,8 +53,8 @@ export function RpsModal({
 
   const stakes =
     myRole === 'defender'
-      ? 'Si ganás, se anula. Si perdés: carta + castigo.'
-      : `Si ganás, ${rival?.name} cumple carta + castigo. Si perdés, se anula.`;
+      ? `Si ganás, se anula. Si perdés: ${penalty}.`
+      : `Si ganás, ${rival?.name} cumple ${penalty}. Si perdés, se anula.`;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 px-4">
@@ -62,7 +64,7 @@ export function RpsModal({
         className="w-full max-w-[400px] rounded-[2rem] border-4 border-black bg-social p-5 text-black shadow-brutal-cream"
       >
         <div className="text-center">
-          <div className="text-[11px] font-black uppercase tracking-widest">Doble o Nada</div>
+          <div className="text-[11px] font-black uppercase tracking-widest">{defenseCard?.name ?? 'Doble o Nada'}</div>
           <h2 className="font-display text-2xl font-black uppercase leading-tight">
             Piedra, Papel o Tijera
           </h2>
@@ -80,7 +82,7 @@ export function RpsModal({
               Ganó {defender?.isMe ? 'vos' : defender?.name} (se anula)
             </BrutalButton>
             <BrutalButton variant="red" onClick={() => onResolve(false)}>
-              Ganó {attacker?.isMe ? 'vos' : attacker?.name} (carta + castigo)
+              Ganó {attacker?.isMe ? 'vos' : attacker?.name} ({penalty})
             </BrutalButton>
           </div>
         )}

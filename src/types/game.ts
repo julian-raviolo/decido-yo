@@ -3,21 +3,21 @@ import type { LucideIcon } from 'lucide-react';
 /** Modo de juego: Clásico o HOT (picante soft). */
 export type GameMode = 'classic' | 'hot';
 
-export type Category =
-  | 'FOOD'
-  | 'SOCIAL'
-  | 'DESTINY'
-  | 'SPECIAL'
-  | 'DEFENSE'
-  /* HOT */
-  | 'DEVIL'
-  | 'ANGEL';
+/** En HOT las mismas categorías se muestran como Cita Picante / Seducción / En Casa / etc. */
+export type Category = 'FOOD' | 'SOCIAL' | 'DESTINY' | 'SPECIAL' | 'DEFENSE';
 
 /** Cómo se apunta una carta de acción. */
 export type TargetMode = 'single' | 'table' | 'random';
 
 /** Qué hace una carta de defensa en modo reactivo. */
-export type DefenseEffect = 'NULLIFY' | 'REFLECT' | 'REDIRECT' | 'DOUBLE_OR_NOTHING' | 'IMMUNITY';
+export type DefenseEffect =
+  | 'NULLIFY'
+  | 'REFLECT'
+  | 'REDIRECT'
+  | 'DOUBLE_OR_NOTHING'
+  | 'IMMUNITY'
+  /** Anula y manda al atacante a la Ruleta. */
+  | 'COUNTER';
 
 /** Comportamientos digitales de las cartas legendarias. */
 export type SpecialEffect = 'ABSOLUTE' | 'BLOOD_PACT' | 'RUSSIAN_ROULETTE' | 'LOOTER';
@@ -28,9 +28,10 @@ export interface CardDef {
   description: string;
   category: Category;
   mode: GameMode;
-  /** Rareza: peso en el sorteo semanal (más copias = más chance de salir). */
-  copies: number;
   icon: LucideIcon;
+  /** Carta PRO: sólo sale en el reparto si está desbloqueada. */
+  isLocked: boolean;
+  packName?: string;
   /** Si el efecto dura un tiempo, se muestra como efecto activo en la mesa. */
   durationMin?: number;
   targetMode?: TargetMode;
@@ -38,6 +39,8 @@ export interface CardDef {
   special?: SpecialEffect;
   /** false = efecto digital: la víctima no puede "negarse" (no hay castigo). */
   refusable?: boolean;
+  /** Piedra, Papel o Tijera perdido: castigo extra (default) o cumplir por el doble de tiempo. */
+  rpsLose?: 'punish' | 'double';
 }
 
 /* ---------- Mazo semanal ---------- */
@@ -46,9 +49,18 @@ export interface WeeklyDeck {
   mode: GameMode;
   /** ISO del lunes 00:00 (hora local) de la semana actual. */
   weekKey: string;
-  /** Las 10 cartas sorteadas esta semana: unidades restantes por id. */
-  stock: Record<string, number>;
-  burned: { cardId: string; at: number }[];
+  /** Presupuesto semanal: 10 cartas quemables por modo. */
+  weeklyBurnsRemaining: number;
+  /** Cartas quemadas esta semana (burnedThisWeek): no vuelven a salir hasta el lunes. */
+  burnedIds: string[];
+  burned: { cardId: string; at: number; consumed: boolean }[];
+}
+
+/** Desbloqueos PRO: packs comprados (permanentes) + retos cumplidos (hasta el lunes). */
+export interface Unlocks {
+  packs: GameMode[];
+  weekKey: string;
+  weekly: string[];
 }
 
 /* ---------- Sala / Juntada ---------- */
@@ -69,8 +81,6 @@ export interface Player {
   isMe: boolean;
   actions: HandCard[];
   defenses: HandCard[];
-  /** Cartas de Acción extra recibidas por mesa de +4 (máx. 1). */
-  actionRefills: number;
   gaggedUntil?: number;
   immuneUntil?: number;
   pactWith?: string;
@@ -116,6 +126,8 @@ export interface Incoming {
   punishAfter?: boolean;
   /** Ataques forzados (Pacto de Sangre) no vuelven a propagarse. */
   noPropagate?: boolean;
+  /** Todo o Nada Sensual perdido: el efecto dura el doble. */
+  durationFactor?: number;
 }
 
 export interface RpsMatch {
@@ -124,6 +136,8 @@ export interface RpsMatch {
   cardId: string;
   attackerId: string;
   defenderId: string;
+  /** Carta de defensa usada (define la penalidad si pierde quien se defiende). */
+  defenseCardId?: string;
 }
 
 export interface RouletteRequest {

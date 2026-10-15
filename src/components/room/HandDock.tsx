@@ -18,66 +18,81 @@ export interface Focus {
 export function HandDock({
   me,
   gagged,
+  noBudget,
   onFocus,
 }: {
   me: Player;
   gagged: boolean;
+  /** Presupuesto semanal agotado: no se puede quemar nada. */
+  noBudget: boolean;
   onFocus: (f: Focus) => void;
 }) {
-  type Entry = { slot: Slot; card: HandCard | null; label: string };
-  const entries: Entry[] = [
-    ...(me.actions.length ? me.actions : [null]).map((card, i, all) => ({
-      slot: 'action' as const,
-      card,
-      label: all.length > 1 ? `Acción ${i + 1}` : 'Slot 1 · Acción',
-    })),
-    ...(me.defenses.length ? me.defenses : [null]).map((card, i, all) => ({
-      slot: 'defense' as const,
-      card,
-      label: all.length > 1 ? `Defensa ${i + 1}` : 'Slot 2 · Defensa',
-    })),
+  const groups: { slot: Slot; title: string; cards: HandCard[]; tint: string }[] = [
+    { slot: 'action', title: 'Acción', cards: me.actions, tint: '#FFD600' },
+    { slot: 'defense', title: 'Escudos', cards: me.defenses, tint: '#00E5FF' },
   ];
-  const size = entries.length > 2 ? 'md' : 'sm';
+  const total = me.actions.length + me.defenses.length;
 
   return (
-    <div className={`flex items-end justify-center ${size === 'md' ? 'gap-2' : 'gap-4'}`}>
-      {entries.map(({ slot, card, label }, i) => {
-        const state = card?.state;
-        const locked = slot === 'action' && gagged && state === 'ready';
-        const usable = state === 'ready';
-        return (
-          <div key={card?.uid ?? `${slot}-${i}`} className="flex flex-col items-center gap-2">
-            {card ? (
-              <motion.button
-                onClick={() => usable && onFocus({ uid: card.uid, cardId: card.cardId, slot })}
-                whileTap={usable ? { scale: 0.95 } : undefined}
-                animate={usable ? { y: [0, -4, 0] } : { y: 0 }}
-                transition={usable ? { repeat: Infinity, duration: 2.6, ease: 'easeInOut', delay: i * 0.6 } : undefined}
-                className="rounded-3xl"
-              >
-                <GameCard cardId={card.cardId} size={size} state={usable ? (locked ? 'locked' : 'ready') : 'burned'} />
-              </motion.button>
-            ) : (
-              <CardBack size={size} label="Sin cartas esta semana" />
-            )}
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
-              {state === 'looted' ? 'Saqueada' : label}
+    <div
+      className={`-mx-4 flex snap-x snap-mandatory items-end gap-3 overflow-x-auto px-4 pb-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+        total <= 3 ? 'justify-center' : ''
+      }`}
+    >
+      {groups.map(({ slot, title, cards, tint }, g) => (
+        <div key={slot} className="flex shrink-0 items-end gap-3">
+          {g > 0 && <div className="h-[150px] w-[3px] shrink-0 self-center rounded-full bg-white/15" aria-hidden />}
+          <div className="flex flex-col gap-1.5">
+            <span className="flex items-center gap-1.5 pl-1 text-[10px] font-black uppercase tracking-widest text-white/70">
+              <span className="h-2.5 w-2.5 rounded-full border-2 border-black" style={{ background: tint }} />
+              {title} · {readyCount(cards)}/{cards.length}
             </span>
+            <div className="flex gap-2.5">
+              {cards.length === 0 && <CardBack size="hand" label="Sin cartas disponibles" />}
+              {cards.map((card, i) => {
+                const usable = card.state === 'ready';
+                const gag = slot === 'action' && gagged;
+                const locked = usable && (gag || noBudget);
+                return (
+                  <motion.button
+                    key={card.uid}
+                    onClick={() => usable && onFocus({ uid: card.uid, cardId: card.cardId, slot })}
+                    whileTap={usable ? { scale: 0.94, rotate: -2 } : undefined}
+                    initial={{ y: 40, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ type: 'spring', damping: 18, stiffness: 220, delay: (g * 3 + i) * 0.05 }}
+                    className="shrink-0 snap-start rounded-[1.4rem]"
+                    aria-label={`${title} ${i + 1}`}
+                  >
+                    <GameCard
+                      cardId={card.cardId}
+                      size="hand"
+                      state={usable ? (locked ? 'locked' : 'ready') : 'burned'}
+                      lockLabel={gag ? 'Amordazada' : 'Sin usos esta semana'}
+                    />
+                  </motion.button>
+                );
+              })}
+            </div>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
 
+const readyCount = (cards: HandCard[]) => cards.filter((c) => c.state === 'ready').length;
+
 export function CardFocus({
   focus,
   locked,
+  lockReason,
   onClose,
   onThrow,
 }: {
   focus: Focus | null;
   locked: boolean;
+  lockReason?: string;
   onClose: () => void;
   onThrow: () => void;
 }) {
@@ -152,22 +167,22 @@ export function CardFocus({
               className="pointer-events-none absolute -inset-3 rounded-[2.2rem] bg-lime blur-xl"
               style={{ opacity: glow }}
             />
-            <GameCard cardId={cardId} size="lg" state={locked ? 'locked' : 'ready'} />
+            <GameCard cardId={cardId} size="lg" state={locked ? 'locked' : 'ready'} lockLabel={lockReason} />
           </motion.div>
 
           <div className="mt-6 w-full max-w-[300px] text-center text-[12px] font-semibold text-white/80" onClick={(e) => e.stopPropagation()}>
-            {slot === 'defense' ? (
+            {locked ? (
+              <p className="flex items-center justify-center gap-1 font-bold text-social">
+                <Lock size={14} strokeWidth={3} /> {lockReason}
+              </p>
+            ) : slot === 'defense' ? (
               <p>
                 <b className="text-defense">Uso reactivo:</b> se activa cuando te atacan (60 s para responder).
                 <br />
                 <b className="text-defense">Uso activo (Mordaza):</b> bloqueá la Acción de alguien por {GAG_MINUTES} min.
               </p>
-            ) : locked ? (
-              <p className="flex items-center justify-center gap-1 text-special">
-                <Lock size={14} strokeWidth={3} /> Te amordazaron: no podés usar tu Acción todavía.
-              </p>
             ) : (
-              <p>Al usarla se quema de tu mazo semanal hasta el lunes.</p>
+              <p>Al usarla gastás 1 de tus 10 usos semanales y no vuelve a salir hasta el lunes.</p>
             )}
             <div className="mt-4 flex gap-3">
               <BrutalButton variant="cream" className="flex-1 py-2.5 text-sm" onClick={onClose}>

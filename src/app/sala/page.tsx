@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Copy, Home, Hourglass, Lock, LogOut, Share2, ShieldCheck, Users, WifiOff } from 'lucide-react';
-import { DOUBLE_HAND_FROM_PLAYERS, EXTRA_ACTION_FROM_PLAYERS, getCard } from '@/data/cards-catalog';
+import { Bot, Copy, Flame, Home, Hourglass, Lock, LogOut, Share2, ShieldCheck, Users, WifiOff } from 'lucide-react';
+import { WEEKLY_BURNS, getCard, handSizeFor } from '@/data/cards-catalog';
 import { isGagged, isImmune, useGame, useNow } from '@/context/GameContext';
 import { CardFocus, HandDock, type Focus } from '@/components/room/HandDock';
 import { IncomingModal } from '@/components/room/IncomingModal';
@@ -61,6 +61,9 @@ export default function SalaPage() {
   ];
   const blockingOverlay = !!(rps || incoming || roulette);
   const n = room.players.length;
+  const hand = handSizeFor(n);
+  const budget = game.deck.weeklyBurnsRemaining;
+  const noBudget = budget <= 0;
   const armedCard = armed ? getCard(armed.cardId) : null;
 
   const handleThrow = () => {
@@ -171,22 +174,19 @@ export default function SalaPage() {
         </div>
       )}
 
-      {(gagged || immune || n >= EXTRA_ACTION_FROM_PLAYERS || (isFriends && !online)) && (
-        <div className="flex shrink-0 flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap gap-2">
           {isFriends && !online && (
             <Pill className="bg-black text-white">
               <WifiOff size={11} strokeWidth={3} /> Reconectando…
             </Pill>
           )}
-          {n >= DOUBLE_HAND_FROM_PLAYERS ? (
-            <Pill className="bg-lime text-black">
-              <Users size={11} strokeWidth={3} /> Mesa de {n}: 2 Acción + 2 Defensa
-            </Pill>
-          ) : n >= EXTRA_ACTION_FROM_PLAYERS ? (
-            <Pill className="bg-lime text-black">
-              <Users size={11} strokeWidth={3} /> Mesa de {n}: +1 Acción al quemar la tuya
-            </Pill>
-          ) : null}
+          <Pill className="bg-lime text-black">
+            <Users size={11} strokeWidth={3} /> Mesa de {n}: {hand.actions} Acción + {hand.defenses} Escudo
+            {hand.defenses > 1 ? 's' : ''}
+          </Pill>
+          <Pill className={noBudget ? 'bg-special text-white' : 'bg-cream text-black'}>
+            <Flame size={11} strokeWidth={3} /> Usos {budget}/{WEEKLY_BURNS}
+          </Pill>
           {gagged && (
             <Pill className="bg-special text-white">
               <Lock size={11} strokeWidth={3} /> Amordazado · {formatCountdown(me.gaggedUntil! - now)}
@@ -197,15 +197,14 @@ export default function SalaPage() {
               <ShieldCheck size={11} strokeWidth={3} /> Intocable · {formatCountdown(me.immuneUntil! - now)}
             </Pill>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Mesa (zona scrolleable) */}
       <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-2 [scrollbar-width:none]">
         {isFriends && n === 1 && (
           <div className="rounded-3xl border-4 border-black bg-lime p-4 text-black shadow-brutal">
             <div className="flex items-center gap-2 font-display text-lg font-black uppercase">
-              <Users size={20} strokeWidth={3} /> Invitá a tus amigos
+              <Users size={20} strokeWidth={3} /> {room.mode === 'hot' ? 'Invitá a tu pareja' : 'Invitá a tus amigos'}
             </div>
             <p className="mt-1 text-sm font-semibold">
               Que abran la app (misma dirección que vos) y entren con el código:
@@ -237,13 +236,18 @@ export default function SalaPage() {
 
       {/* Mano */}
       <div className="shrink-0">
-        <HandDock me={me} gagged={gagged} onFocus={setFocus} />
+        <HandDock me={me} gagged={gagged} noBudget={noBudget} onFocus={setFocus} />
       </div>
 
       {/* Capas */}
       <CardFocus
         focus={focus}
-        locked={focus?.slot === 'action' && gagged}
+        locked={(focus?.slot === 'action' && gagged) || noBudget}
+        lockReason={
+          noBudget
+            ? `Gastaste tus ${WEEKLY_BURNS} usos de la semana. Vuelven el lunes.`
+            : 'Te amordazaron: no podés usar tu Acción todavía.'
+        }
         onClose={() => setFocus(null)}
         onThrow={handleThrow}
       />
@@ -301,6 +305,7 @@ export default function SalaPage() {
           players={room.players}
           me={me}
           now={now}
+          noBudget={noBudget}
           onRespond={(choice, opts) => game.respondIncoming(incoming.id, choice, opts)}
           onExpire={onExpire}
         />

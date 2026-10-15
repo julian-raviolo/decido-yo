@@ -7,13 +7,13 @@ import { motion } from 'framer-motion';
 import {
   Bot,
   CalendarClock,
+  Crown,
   Flame,
   Layers,
   Loader2,
   LogIn,
   Minus,
   Plus,
-  Shield,
   Sparkles,
   Users,
   X,
@@ -21,9 +21,9 @@ import {
 } from 'lucide-react';
 import { GameCard } from '@/components/GameCard';
 import { BrutalButton, Sheet } from '@/components/ui';
-import { WEEKLY_ACTION, WEEKLY_DEFENSE, WEEKLY_TOTAL } from '@/data/cards-catalog';
+import { MAX_PLAYERS, WEEKLY_BURNS, activeCardsFor, proCardsFor } from '@/data/cards-catalog';
 import { useGame, useNow } from '@/context/GameContext';
-import { nextReset, remainingAction, remainingDefense } from '@/lib/deck';
+import { nextReset } from '@/lib/deck';
 import { formatDuration } from '@/lib/utils';
 import type { GameMode } from '@/types/game';
 
@@ -45,8 +45,11 @@ export default function HomePage() {
   }, []);
 
   const hot = mode === 'hot';
-  const action = remainingAction(deck);
-  const defense = remainingDefense(deck);
+  const left = hydrated ? deck.weeklyBurnsRemaining : WEEKLY_BURNS;
+  const pro = proCardsFor(mode);
+  const proUnlocked = hydrated ? pro.filter((c) => game.unlockedIds.includes(c.id)).length : 0;
+  const maxBots = MAX_PLAYERS[mode] - 1;
+  const botCount = Math.min(bots, maxBots);
   const nameOk = profile.name.trim().length >= 2;
 
   const pickMode = (m: GameMode) => {
@@ -63,7 +66,7 @@ export default function HomePage() {
     setBusy(kind);
     try {
       if (kind === 'join') await game.joinRoom(joinCode);
-      else await game.createRoom({ kind: kind === 'bots' ? 'bots' : 'friends', bots });
+      else await game.createRoom({ kind: kind === 'bots' ? 'bots' : 'friends', bots: botCount });
       router.push('/sala');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Algo salió mal');
@@ -78,7 +81,7 @@ export default function HomePage() {
       <header className="relative pt-4">
         <div className="pointer-events-none absolute -right-2 top-0 flex">
           <motion.div key={`a-${mode}`} initial={{ rotate: 0, y: 20 }} animate={{ rotate: 14, y: 0 }} className="origin-bottom">
-            <GameCard cardId={hot ? 'hot-mirada-fatal' : 'sommelier-del-caos'} size="mini" />
+            <GameCard cardId={hot ? 'hot-mirada-intimidante' : 'sommelier-del-caos'} size="mini" />
           </motion.div>
           <motion.div
             key={`b-${mode}`}
@@ -86,7 +89,7 @@ export default function HomePage() {
             animate={{ rotate: -10, y: 8 }}
             className="-ml-10 origin-bottom"
           >
-            <GameCard cardId={hot ? 'hot-angel-guarda' : 'decido-yo-que-no'} size="mini" />
+            <GameCard cardId={hot ? 'hot-tension-acumulada' : 'decido-yo-que-no'} size="mini" />
           </motion.div>
         </div>
         <p className="text-[11px] font-black uppercase tracking-[0.25em] text-lime">
@@ -158,27 +161,28 @@ export default function HomePage() {
             <Layers size={20} strokeWidth={3} /> Mazo {hot ? 'HOT' : 'semanal'}
           </span>
           <span className="font-display text-2xl font-black text-lime">
-            {hydrated ? action + defense : '–'}/{WEEKLY_TOTAL}
+            {left}/{WEEKLY_BURNS}
           </span>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-3">
           <PoolBar
-            icon={<Zap size={14} strokeWidth={3} />}
-            label={hot ? 'Diablo' : 'Acción'}
-            value={action}
-            max={WEEKLY_ACTION}
+            icon={<Flame size={14} strokeWidth={3} />}
+            label="Usos esta semana"
+            value={left}
+            max={WEEKLY_BURNS}
             color={hot ? '#FF4D6D' : '#FFD600'}
           />
-          <PoolBar
-            icon={<Shield size={14} strokeWidth={3} />}
-            label={hot ? 'Ángel' : 'Defensa'}
-            value={defense}
-            max={WEEKLY_DEFENSE}
-            color={hot ? '#FFF1C9' : '#00E5FF'}
-          />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-black uppercase">
+          <span className="flex items-center gap-1 rounded-full border-2 border-black bg-cream px-2 py-0.5 text-black">
+            <Zap size={11} strokeWidth={3} /> {activeCardsFor(mode).length} activas
+          </span>
+          <span className="flex items-center gap-1 rounded-full border-2 border-black bg-halo px-2 py-0.5 text-black">
+            <Crown size={11} strokeWidth={3} /> PRO {proUnlocked}/{pro.length}
+          </span>
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold uppercase text-white/70">
-          <CalendarClock size={13} /> 10 cartas nuevas el lunes · faltan{' '}
+          <CalendarClock size={13} /> Vuelve a {WEEKLY_BURNS}/{WEEKLY_BURNS} el lunes · faltan{' '}
           {hydrated ? formatDuration(nextReset(new Date(now)).getTime() - now) : '…'}
         </div>
       </Link>
@@ -192,10 +196,12 @@ export default function HomePage() {
       {/* Jugar con amigos */}
       <section className="flex flex-col gap-3 rounded-3xl border-4 border-black bg-lime p-4 text-black shadow-brutal">
         <div className="flex items-center gap-2 font-display text-xl font-black uppercase">
-          <Users size={22} strokeWidth={3} /> Jugar con amigos
+          <Users size={22} strokeWidth={3} /> {hot ? 'Jugar en pareja' : 'Jugar con amigos'}
         </div>
         <p className="-mt-1 text-xs font-semibold">
-          Creá la sala y compartí el código. Cada uno juega desde su celular con su propio mazo.
+          {hot
+            ? 'Sala privada para 2: creala y pasale el código a tu pareja.'
+            : 'Creá la sala (hasta 12) y compartí el código. Cada uno juega desde su celular con su propio mazo.'}
         </p>
         <BrutalButton
           variant="cream"
@@ -241,8 +247,8 @@ export default function HomePage() {
           <StepButton onClick={() => setBots((b) => Math.max(1, b - 1))} aria-label="Menos bots">
             <Minus size={14} strokeWidth={3} />
           </StepButton>
-          <span className="w-6 text-center font-display text-lg font-black">{bots}</span>
-          <StepButton onClick={() => setBots((b) => Math.min(14, b + 1))} aria-label="Más bots">
+          <span className="w-6 text-center font-display text-lg font-black">{botCount}</span>
+          <StepButton onClick={() => setBots((b) => Math.min(maxBots, b + 1))} aria-label="Más bots">
             <Plus size={14} strokeWidth={3} />
           </StepButton>
         </div>
@@ -259,17 +265,19 @@ export default function HomePage() {
         <h2 className="mb-2 font-display font-black uppercase text-cream">Reglas rápidas</h2>
         <ul className="flex list-disc flex-col gap-1 pl-4">
           <li>
-            Cada semana tenés <b>10 cartas</b> sorteadas del catálogo (7 {hot ? 'Diablo' : 'Acción'} + 3{' '}
-            {hot ? 'Ángel' : 'Defensa'}).
+            Tenés <b>10 usos por semana</b> por modo. Cada carta quemada no vuelve hasta el lunes.
           </li>
           <li>
-            Cada sala te reparte <b>1 + 1</b> al azar. Lo que usás se <b>quema</b>; lo que no, vuelve.
+            Mesa de <b>2 a 6</b>: te tocan <b>2 Acción + 1 Escudo</b>.
           </li>
+          {!hot && (
+            <li>
+              Mesa de <b>7 a 12</b>: <b>3 Acción + 2 Escudos</b>.
+            </li>
+          )}
           <li>
-            Mesa de <b>5 o más</b>: al quemar tu Acción recibís <b>una más</b>.
-          </li>
-          <li>
-            Mesa de <b>11 o más</b>: arrancás con <b>2 + 2</b>.
+            {activeCardsFor(mode).length} cartas activas + {pro.length} <b>PRO</b>: destrabalas con el pack o cumpliendo un
+            reto.
           </li>
           <li>
             Te atacan: <b>60 s</b> para defenderte. ¿No cumplís? <b>Ruleta</b>, sí o sí.
@@ -285,12 +293,11 @@ export default function HomePage() {
       <Sheet open={hotAsk} onClose={() => setHotAsk(false)} title="Modo HOT 😇😈" tone="#9E0014">
         <div className="flex flex-col gap-3 text-sm font-semibold text-cream">
           <p>
-            20 cartas picantes pero <b>soft</b>: miradas, susurros, verdades y retos de coqueteo. Pensado para
-            citas y juntadas entre adultos.
+            50 cartas picantes (30 activas + 20 PRO) <b>exclusivas para parejas</b>: todo pasa entre ustedes dos,
+            sin exponer a nadie frente a terceros. Las salas HOT son de 2 jugadores.
           </p>
           <p>
-            Regla de oro: <b>todo con consentimiento</b>. Si alguien no quiere, no se hace; el Ángel siempre puede
-            salvar a cualquiera.
+            Regla de oro: <b>todo con consentimiento</b>. Un “no” siempre se respeta y los escudos están para usarlos.
           </p>
           <BrutalButton
             variant="lime"

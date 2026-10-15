@@ -29,26 +29,25 @@ export const BOT_RULES = [
   'Nadie puede cruzarse de brazos',
 ];
 
-/** Retos HOT: picantes pero soft. Siempre con consentimiento; nadie toca a nadie sin un "sí". */
+/** Retos HOT: exclusivos de pareja, privados y siempre con consentimiento. */
 export const HOT_PUNISHMENTS: Punishment[] = [
-  { id: 'h-oido', text: 'Susurrá un cumplido al oído de quien elija la mesa', color: '#1A0006' },
-  { id: 'h-mirada', text: '20 segundos de mirada fija con quien tengas enfrente', color: '#FFD166' },
-  { id: 'h-mejilla', text: 'Beso en la mejilla a quien tengas a tu derecha', color: '#FF4D6D' },
-  { id: 'h-lento', text: 'Lento de 20 segundos con quien elija la mesa', color: '#FFF1C9' },
-  { id: 'h-atraccion', text: 'Contá qué es lo primero que te atrae de alguien', color: '#1A0006' },
-  { id: 'h-confesion', text: 'Confesá tu crush famoso más vergonzoso', color: '#FFD166' },
-  { id: 'h-pickup', text: 'Tirale tu mejor frase de levante a alguien de la mesa', color: '#FF4D6D' },
-  { id: 'h-emoji', text: 'Mandá un 😈 a tu último chat, sin explicar nada', color: '#FFF1C9' },
-  { id: 'h-poema', text: 'Improvisá un poema romántico de 4 versos', color: '#1A0006' },
-  { id: 'h-mano', text: 'De la mano con quien elija la mesa por 5 minutos', color: '#FFD166' },
-  { id: 'h-selfie', text: 'Selfie de "pareja" con quien elija la mesa', color: '#FF4D6D' },
-  { id: 'h-cita', text: 'Contá tu cita ideal con lujo de detalles', color: '#FFF1C9' },
+  { id: 'h-beso-lento', text: 'Un beso lento de 10 segundos, ahora', color: '#1A0006' },
+  { id: 'h-masaje-manos', text: 'Masaje de manos de 2 minutos', color: '#FFD166' },
+  { id: 'h-tres-cosas', text: 'Decime al oído 3 cosas que te encantan de mí', color: '#FF4D6D' },
+  { id: 'h-recuerdo', text: 'Contame tu recuerdo favorito de nosotros', color: '#FFF1C9' },
+  { id: 'h-beso-elegido', text: 'Me debés un beso donde yo elija (a solas)', color: '#1A0006' },
+  { id: 'h-mensaje', text: 'Mandame un mensaje romántico ahora, frente a mí', color: '#FFD166' },
+  { id: 'h-lento', text: 'Bailamos un lento al llegar a casa', color: '#FF4D6D' },
+  { id: 'h-primera-vez', text: 'Confesá qué pensaste la primera vez que me viste', color: '#FFF1C9' },
+  { id: 'h-proxima-cita', text: 'La próxima cita la elijo yo y la pagás vos', color: '#1A0006' },
+  { id: 'h-abrazo', text: 'Abrazo de 30 segundos sin soltarme', color: '#FFD166' },
+  { id: 'h-plan', text: 'Susurrame tu plan ideal para esta noche', color: '#FF4D6D' },
+  { id: 'h-desayuno', text: 'Mañana me llevás el desayuno a la cama', color: '#FFF1C9' },
 ];
 
-/** Reglas que imponen los bots con "Ley del Diablo". */
+/** Reglas que imponen los bots en salas HOT (si alguna carta lo requiere). */
 export const HOT_BOT_RULES = [
-  'Cada vez que alguien dice "amor", brinda mirando a los ojos',
+  'Cada vez que alguien dice "amor", hay un beso',
   'Para pedir algo hay que decir "por favor, bombón"',
-  'El que se ríe primero en un silencio, tira un beso volado',
-  'Prohibido decir "no"; solo "quizás más tarde"',
+  'Prohibido mirar el celular: el que lo hace debe un masaje',
 ];

@@ -1,12 +1,13 @@
 import {
-  WEEKLY_ACTION,
-  WEEKLY_DEFENSE,
-  actionCardsFor,
-  defenseCardsFor,
-  isDefenseCard,
+  WEEKLY_BURNS,
+  activeCardsFor,
+  catalogFor,
   getCard,
+  hasCard,
+  isDefenseCard,
+  proCardsFor,
 } from '@/data/cards-catalog';
-import type { CardDef, GameMode, HandCard, WeeklyDeck } from '@/types/game';
+import type { CardDef, GameMode, HandCard, Unlocks, WeeklyDeck } from '@/types/game';
 import { uid } from '@/lib/utils';
 
 /** Lunes 00:00 (hora local) de la semana que contiene `date`. */
@@ -27,90 +28,103 @@ export const nextReset = (date = new Date()) => {
 
 export const weekKeyFor = (date = new Date()) => startOfWeek(date).toISOString();
 
-/** Sorteo sin repetición, ponderado por rareza (`copies`). */
-const sampleDistinct = (pool: CardDef[], n: number): string[] => {
-  const left = [...pool];
-  const out: string[] = [];
-  while (out.length < n && left.length) {
-    const total = left.reduce((s, c) => s + c.copies, 0);
-    let roll = Math.random() * total;
-    const i = left.findIndex((c) => (roll -= c.copies) < 0);
-    out.push(left.splice(i === -1 ? left.length - 1 : i, 1)[0].id);
-  }
-  return out;
-};
+/* ------------------------------------------------------------------ */
+/* Presupuesto semanal: 10 quemas por modo                             */
+/* ------------------------------------------------------------------ */
 
-/** 10 cartas variadas por semana (7 Acción + 3 Defensa) del catálogo completo. */
-export const createWeeklyDeck = (mode: GameMode, date = new Date()): WeeklyDeck => {
-  const ids = [
-    ...sampleDistinct(actionCardsFor(mode), WEEKLY_ACTION),
-    ...sampleDistinct(defenseCardsFor(mode), WEEKLY_DEFENSE),
-  ];
-  return {
-    mode,
-    weekKey: weekKeyFor(date),
-    stock: Object.fromEntries(ids.map((id) => [id, 1])),
-    burned: [],
-  };
-};
+export const createWeeklyDeck = (mode: GameMode, date = new Date()): WeeklyDeck => ({
+  mode,
+  weekKey: weekKeyFor(date),
+  weeklyBurnsRemaining: WEEKLY_BURNS,
+  burnedIds: [],
+  burned: [],
+});
 
-/** Nuevo sorteo si cambió la semana (lunes 00:00) o el formato guardado es viejo. */
+/** Reinicia a 10/10 el lunes 00:00 (o si el formato guardado es viejo). */
 export const ensureCurrentWeek = (deck: WeeklyDeck | null | undefined, mode: GameMode, date = new Date()) => {
   const valid =
     deck &&
     deck.mode === mode &&
     deck.weekKey === weekKeyFor(date) &&
-    Object.keys(deck.stock).every((id) => {
-      try {
-        return getCard(id).mode === mode;
-      } catch {
-        return false;
-      }
-    });
+    typeof deck.weeklyBurnsRemaining === 'number' &&
+    Array.isArray(deck.burnedIds);
   return valid ? deck : createWeeklyDeck(mode, date);
 };
 
-export const deckCards = (deck: WeeklyDeck) => Object.keys(deck.stock).map(getCard);
-
-const count = (deck: WeeklyDeck, defense: boolean) =>
-  deckCards(deck)
-    .filter((c) => isDefenseCard(c) === defense)
-    .reduce((n, c) => n + Math.max(0, deck.stock[c.id] ?? 0), 0);
-
-export const remainingAction = (deck: WeeklyDeck) => count(deck, false);
-export const remainingDefense = (deck: WeeklyDeck) => count(deck, true);
-export const remainingTotal = (deck: WeeklyDeck) => remainingAction(deck) + remainingDefense(deck);
-
 /**
- * Saca una carta al azar del mazo semanal. No descuenta stock (sólo se quema lo que se usa),
- * pero respeta las cartas que ya están reservadas en la mano.
+ * Quema una carta: queda marcada `burnedThisWeek` hasta el lunes.
+ * `consume` descuenta 1 del presupuesto (uso propio); un saqueo la quema sin gastar presupuesto.
  */
-export const drawCard = (deck: WeeklyDeck, defense: boolean, reserved: string[] = []): string | null => {
-  const avail: string[] = [];
-  for (const c of deckCards(deck)) {
-    if (isDefenseCard(c) !== defense) continue;
-    const n = (deck.stock[c.id] ?? 0) - reserved.filter((r) => r === c.id).length;
-    for (let i = 0; i < n; i++) avail.push(c.id);
-  }
-  return avail.length ? avail[Math.floor(Math.random() * avail.length)] : null;
+export const burnCard = (deck: WeeklyDeck, cardId: string, consume = true): WeeklyDeck => ({
+  ...deck,
+  weeklyBurnsRemaining: consume ? Math.max(0, deck.weeklyBurnsRemaining - 1) : deck.weeklyBurnsRemaining,
+  burnedIds: deck.burnedIds.includes(cardId) ? deck.burnedIds : [...deck.burnedIds, cardId],
+  burned: [...deck.burned, { cardId, at: Date.now(), consumed: consume }],
+});
+
+export const isBurnedThisWeek = (deck: WeeklyDeck, cardId: string) => deck.burnedIds.includes(cardId);
+
+/* ------------------------------------------------------------------ */
+/* Desbloqueos PRO                                                     */
+/* ------------------------------------------------------------------ */
+
+export const emptyUnlocks = (date = new Date()): Unlocks => ({ packs: [], weekKey: weekKeyFor(date), weekly: [] });
+
+/** Los desbloqueos por reto duran hasta el lunes; los packs comprados son permanentes. */
+export const ensureUnlocks = (u: Unlocks | null | undefined, date = new Date()): Unlocks => {
+  if (!u || !Array.isArray(u.packs)) return emptyUnlocks(date);
+  if (u.weekKey !== weekKeyFor(date)) return { packs: u.packs, weekKey: weekKeyFor(date), weekly: [] };
+  return { ...u, weekly: u.weekly.filter(hasCard) };
 };
 
-/** Quema permanente de una unidad hasta el próximo lunes. */
-export const burnCard = (deck: WeeklyDeck, cardId: string): WeeklyDeck => ({
-  ...deck,
-  stock: { ...deck.stock, [cardId]: Math.max(0, (deck.stock[cardId] ?? 0) - 1) },
-  burned: [...deck.burned, { cardId, at: Date.now() }],
-});
+/** `unlockedCardIds`: todas las PRO de packs comprados + las ganadas con retos esta semana. */
+export const unlockedCardIds = (u: Unlocks): string[] => [
+  ...u.packs.flatMap((m) => proCardsFor(m).map((c) => c.id)),
+  ...u.weekly,
+];
+
+export const isPlayable = (card: CardDef, unlocked: string[]) => !card.isLocked || unlocked.includes(card.id);
+
+/* ------------------------------------------------------------------ */
+/* Reparto                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Saca una carta al azar para la mano: del modo, desbloqueada, no quemada esta
+ * semana y que no esté ya en la mano. No descuenta presupuesto (sólo se quema lo que se usa).
+ */
+export const drawCard = (
+  deck: WeeklyDeck,
+  defense: boolean,
+  unlocked: string[],
+  reserved: string[] = [],
+): string | null => {
+  const pool = catalogFor(deck.mode).filter(
+    (c) =>
+      isDefenseCard(c) === defense &&
+      isPlayable(c, unlocked) &&
+      !deck.burnedIds.includes(c.id) &&
+      !reserved.includes(c.id),
+  );
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null;
+};
 
 export const handCard = (cardId: string): HandCard => ({ uid: uid('h_'), cardId, state: 'ready' });
 
-/** Mano infinita para bots del modo prueba. */
-const weighted = (pool: CardDef[]) => {
-  const all = pool.flatMap((c) => Array<string>(c.copies).fill(c.id));
-  return all[Math.floor(Math.random() * all.length)];
+/** Mano infinita para bots del modo prueba (sólo cartas activas). */
+export const randomActionCard = (mode: GameMode) => {
+  const pool = activeCardsFor(mode).filter((c) => !isDefenseCard(c));
+  return pool[Math.floor(Math.random() * pool.length)].id;
 };
-export const randomActionCard = (mode: GameMode) => weighted(actionCardsFor(mode));
-export const randomDefenseCard = (mode: GameMode) => weighted(defenseCardsFor(mode));
+export const randomDefenseCard = (mode: GameMode) => {
+  const pool = activeCardsFor(mode).filter(isDefenseCard);
+  return pool[Math.floor(Math.random() * pool.length)].id;
+};
 
-/** Cuántos slots de cada tipo corresponden según el tamaño de la mesa. */
-export const slotsFor = (players: number) => (players >= 11 ? 2 : 1);
+/** Para el modal de desbloqueo: un reto al azar entre las 30 activas del modo. */
+export const randomChallenge = (mode: GameMode, exclude?: string) => {
+  const pool = activeCardsFor(mode).filter((c) => !isDefenseCard(c) && c.id !== exclude);
+  return pool[Math.floor(Math.random() * pool.length)];
+};
+
+export { getCard };

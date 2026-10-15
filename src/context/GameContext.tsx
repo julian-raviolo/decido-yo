@@ -3,20 +3,23 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   DEFENSE_WINDOW_SECONDS,
-  EXTRA_ACTION_FROM_PLAYERS,
+  MAX_PLAYERS,
+  handSizeFor,
   GAG_MINUTES,
   IMMUNITY_MINUTES,
   getCard,
+  hasCard,
 } from '@/data/cards-catalog';
 import { BOT_RULES, HOT_BOT_RULES } from '@/data/punishments';
 import {
   burnCard,
   drawCard,
   ensureCurrentWeek,
+  ensureUnlocks,
   handCard,
   randomActionCard,
   randomDefenseCard,
-  slotsFor,
+  unlockedCardIds,
 } from '@/lib/deck';
 import {
   createLocalTransport,
@@ -37,6 +40,7 @@ import type {
   Profile,
   Room,
   TablePlay,
+  Unlocks,
   WeeklyDeck,
 } from '@/types/game';
 
@@ -62,8 +66,14 @@ interface GameContextValue {
   profile: Profile;
   mode: GameMode;
   settings: Settings;
-  /** Mazo semanal del modo activo. */
+  /** Mazo semanal (presupuesto de 10 quemas) del modo activo. */
   deck: WeeklyDeck;
+  decks: Decks;
+  /** IDs de cartas PRO habilitadas (packs comprados + retos de esta semana). */
+  unlockedIds: string[];
+  unlocks: Unlocks;
+  buyPack(mode: GameMode): void;
+  unlockWithChallenge(cardId: string): void;
   room: Room | null;
   me: Player | null;
   online: boolean;
@@ -106,12 +116,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     hot: ensureCurrentWeek(null, 'hot'),
   }));
   const [room, setRoomState] = useState<Room | null>(null);
+  const [unlocks, setUnlocksState] = useState<Unlocks>(() => ensureUnlocks(null));
   const [online, setOnline] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
   // Refs síncronas: la lógica de juego lee siempre el estado más reciente.
   const roomRef = useRef<Room | null>(null);
   const decksRef = useRef<Decks>(decks);
+  const unlocksRef = useRef<Unlocks>(unlocks);
   const profileRef = useRef<Profile>(profile);
   const transportRef = useRef<RoomTransport>(createLocalTransport());
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
@@ -140,11 +152,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setDecksState(next);
   }, []);
 
+  const setUnlocks = useCallback((next: Unlocks) => {
+    unlocksRef.current = next;
+    setUnlocksState(next);
+  }, []);
+  const unlockedNow = () => unlockedCardIds(ensureUnlocks(unlocksRef.current));
+
   const deckOf = (mode: GameMode) => ensureCurrentWeek(decksRef.current[mode], mode);
-  const burn = (cardId: string) => {
+  /** Quema una carta (burnedThisWeek). `consume`: descuenta 1 del presupuesto de 10. */
+  const burn = (cardId: string, consume = true) => {
     const mode = getCard(cardId).mode;
-    setDecks({ ...decksRef.current, [mode]: burnCard(deckOf(mode), cardId) });
+    setDecks({ ...decksRef.current, [mode]: burnCard(deckOf(mode), cardId, consume) });
   };
+  const hasBudget = (mode: GameMode) => deckOf(mode).weeklyBurnsRemaining > 0;
 
   const later = useCallback((ms: number, fn: () => void) => {
     const t = setTimeout(() => {
@@ -218,13 +238,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setSettings(st);
     const saved = storage.get<Partial<Decks>>(STORAGE_KEYS.decks, {});
     setDecks({ classic: ensureCurrentWeek(saved.classic, 'classic'), hot: ensureCurrentWeek(saved.hot, 'hot') });
+    setUnlocks(ensureUnlocks(storage.get<Unlocks | null>(STORAGE_KEYS.unlocks, null)));
     const savedRoom = storage.get<Room | null>(STORAGE_KEYS.room, null);
-    if (savedRoom?.players?.some((x) => x.id === p.id)) {
+    // Si el catálogo cambió y la sala guardada tiene cartas que ya no existen, se descarta.
+    const validCards = savedRoom?.players?.every((x) => [...x.actions, ...x.defenses].every((c) => hasCard(c.cardId)));
+    if (validCards && savedRoom?.players?.some((x) => x.id === p.id)) {
       setRoom(savedRoom);
       connect(savedRoom);
     }
     setHydrated(true);
-  }, [connect, setDecks, setRoom]);
+  }, [connect, setDecks, setRoom, setUnlocks]);
 
   useEffect(() => {
     if (hydrated) storage.set(STORAGE_KEYS.profile, profile);
@@ -236,6 +259,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (hydrated) storage.set(STORAGE_KEYS.decks, decks);
   }, [hydrated, decks]);
   useEffect(() => {
+    if (hydrated) storage.set(STORAGE_KEYS.unlocks, unlocks);
+  }, [hydrated, unlocks]);
+  useEffect(() => {
     if (!hydrated) return;
     if (room) storage.set(STORAGE_KEYS.room, room);
     else storage.remove(STORAGE_KEYS.room);
@@ -246,10 +272,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const t = setInterval(() => {
       const next = { classic: deckOf('classic'), hot: deckOf('hot') };
       if (next.classic !== decksRef.current.classic || next.hot !== decksRef.current.hot) setDecks(next);
+      const u = ensureUnlocks(unlocksRef.current);
+      if (u.weekKey !== unlocksRef.current.weekKey) setUnlocks(u);
     }, 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setDecks]);
+  }, [setDecks, setUnlocks]);
 
   useEffect(
     () => () => {
@@ -268,35 +296,30 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------------- reglas de mesa: tamaño de la mano ---------------- */
 
+  // 2–6 jugadores: 2 Acción + 1 Defensa · 7–12 jugadores: 3 Acción + 2 Defensa.
+  // Si la mesa crece durante la juntada, se reparten las cartas que falten.
   useEffect(() => {
     const r = roomRef.current;
     const me = r?.players.find((p) => p.isMe);
     if (!r || !me) return;
-    const n = r.players.length;
-    const slots = slotsFor(n);
+    const size = handSizeFor(r.players.length);
     const deck = deckOf(r.mode);
+    const unlocked = unlockedNow();
     const reserved = [...me.actions, ...me.defenses].filter((c) => c.state === 'ready').map((c) => c.cardId);
 
-    // Más de 10 jugadores: 2 Acción + 2 Defensa.
-    for (const [slot, isDef] of [['actions', false], ['defenses', true]] as const) {
-      if (me[slot].length < slots) {
-        const id = drawCard(deck, isDef, reserved);
-        if (!id) continue;
+    for (const [slot, isDef, want] of [
+      ['actions', false, size.actions],
+      ['defenses', true, size.defenses],
+    ] as const) {
+      for (let i = me[slot].length; i < want; i++) {
+        const id = drawCard(deck, isDef, unlocked, reserved);
+        if (!id) break;
         reserved.push(id);
         send({ type: 'ADD_CARD', playerId: me.id, slot, card: handCard(id) });
-        log(`🃏 Mesa de +10: ${says(me.id, 'recibe', 'recibís')} otra carta de ${isDef ? 'Defensa' : 'Acción'}.`, 'system');
-      }
-    }
-
-    // Más de 4 jugadores: +1 Acción, sólo después de quemar la anterior.
-    const spent = me.actions.length > 0 && me.actions.every((c) => c.state !== 'ready');
-    if (n >= EXTRA_ACTION_FROM_PLAYERS && spent && me.actionRefills < 1) {
-      const id = drawCard(deck, false, reserved);
-      if (id) {
-        const slot = me.actions.find((c) => c.state !== 'ready')!;
-        send({ type: 'REPLACE_CARD', playerId: me.id, uid: slot.uid, card: handCard(id) });
-        send({ type: 'PATCH_PLAYER', playerId: me.id, patch: { actionRefills: me.actionRefills + 1 } });
-        log(`🃏 Mesa de +4: ${says(me.id, 'recibe', 'recibís')} una carta de Acción extra.`, 'system');
+        log(
+          `🃏 Mesa de ${r.players.length}: ${says(me.id, 'recibe', 'recibís')} otra carta de ${isDef ? 'Defensa' : 'Acción'}.`,
+          'system',
+        );
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -329,16 +352,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   });
 
   /** Aplica el efecto de la carta sobre el objetivo (la víctima cumple). */
-  const applyComply = (play: TablePlay, propagate: boolean) => {
+  const applyComply = (play: TablePlay, propagate: boolean, durationFactor = 1) => {
     const target = player(play.toId);
     if (!target) return;
     const card = getCard(play.cardId);
     send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'complied' });
 
     if (card.special === 'LOOTER') {
-      const victim = readyCards(target.actions)[0];
+      const loot = readyCards(target.actions);
+      const victim = loot[Math.floor(Math.random() * loot.length)];
       if (victim) {
-        if (target.isMe) burn(victim.cardId);
+        // Se quema (no vuelve hasta el lunes) pero no gasta el presupuesto de la víctima.
+        if (target.isMe) burn(victim.cardId, false);
         send({ type: 'SET_CARD_STATE', playerId: target.id, uid: victim.uid, state: 'looted' });
         log(`🔥 ${says(play.fromId, 'saqueó', 'saqueaste')} la carta de Acción de ${objOf(target.id)}.`, 'attack');
         if (target.isBot) refillBot(target.id, victim.uid, 'action');
@@ -355,7 +380,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    log(`✅ ${says(target.id, 'cumple', 'cumplís')} «${card.name}».`, 'info');
+    log(`✅ ${says(target.id, 'cumple', 'cumplís')} «${card.name}»${durationFactor > 1 ? ' (doble de tiempo)' : ''}.`, 'info');
     if (card.durationMin) {
       send({
         type: 'ADD_EFFECT',
@@ -364,7 +389,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           cardId: card.id,
           targetId: target.id,
           fromId: play.fromId,
-          endsAt: Date.now() + card.durationMin * MIN,
+          endsAt: Date.now() + card.durationMin * durationFactor * MIN,
         },
       });
     }
@@ -382,11 +407,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   };
 
   /** Ataque sin posibilidad de defensa: cumplir o castigo. */
-  const forceOn = (play: TablePlay, reason: string, propagate: boolean, punishAfter = false) => {
+  const forceOn = (play: TablePlay, reason: string, propagate: boolean, punishAfter = false, durationFactor = 1) => {
     const target = player(play.toId);
     if (!target) return;
     if (target.isBot) {
-      later(1200 + Math.random() * 1200, () => botAccept(play.id, propagate, punishAfter));
+      later(1200 + Math.random() * 1200, () => botAccept(play.id, propagate, punishAfter, durationFactor));
       return;
     }
     send({
@@ -402,11 +427,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         reason,
         punishAfter,
         noPropagate: !propagate,
+        durationFactor,
       },
     });
   };
 
-  const botAccept = (playId: string, propagate: boolean, punishAfter = false) => {
+  const botAccept = (playId: string, propagate: boolean, punishAfter = false, durationFactor = 1) => {
     const play = getPlay(playId);
     const bot = player(play?.toId);
     if (!play || !bot) return;
@@ -417,7 +443,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       pushRoulette(bot.id, `Se negó a «${card.name}»`);
       return;
     }
-    applyComply(play, propagate);
+    applyComply(play, propagate, durationFactor);
     if (punishAfter) pushRoulette(bot.id, `Perdió el Doble o Nada contra «${card.name}»`);
   };
 
@@ -481,7 +507,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     switch (effect) {
       case 'NULLIFY': {
         send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'nullified' });
-        log(`🚫 «${card.name}» anulada por ${objOf(defenderId)}.`, 'defense');
+        const def = getCard(defenseCardId);
+        // Los escudos HOT dejan una "deuda": se muestra el texto de la carta.
+        log(
+          `🚫 «${card.name}» anulada por ${objOf(defenderId)}${def.mode === 'hot' ? ` · ${def.description}` : '.'}`,
+          'defense',
+        );
+        return;
+      }
+      case 'COUNTER': {
+        send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'nullified' });
+        log(`⚔️ Contraataque: «${card.name}» anulada y ${objOf(play.fromId)} va a la Ruleta.`, 'defense');
+        pushRoulette(play.fromId, `Contraataque Letal de ${defender.name}`);
         return;
       }
       case 'IMMUNITY': {
@@ -503,11 +540,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       case 'REDIRECT': {
-        const target =
-          (redirectTo && player(redirectTo)) || pickRandomOrNull(eligibleTargets([defenderId]));
+        // En citas de a 2 no hay a quién desviar: funciona como escudo normal.
+        const twoPlayers = (roomRef.current?.players.length ?? 0) <= 2;
+        const target = twoPlayers
+          ? null
+          : (redirectTo && player(redirectTo)) || pickRandomOrNull(eligibleTargets([defenderId]));
         if (!target) {
           send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'nullified' });
-          log(`🐐 No había a quién desviar: «${card.name}» se pierde.`, 'defense');
+          log(`🐐 «${card.name}» queda anulada (no había a quién desviarla).`, 'defense');
           return;
         }
         send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'redirected' });
@@ -527,17 +567,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             'defense',
           );
           if (defenderWins) send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'nullified' });
-          else forceOn(play, 'Perdió el Doble o Nada', true, true);
+          else loseRps(play, defenderId, defenseCardId);
           return;
         }
         send({
           type: 'SET_RPS',
-          rps: { id: uid('rps_'), playId: play.id, cardId: play.cardId, attackerId: play.fromId, defenderId },
+          rps: { id: uid('rps_'), playId: play.id, cardId: play.cardId, attackerId: play.fromId, defenderId, defenseCardId },
         });
-        log(`✂️ Doble o Nada: ${nameOf(play.fromId)} vs ${objOf(defenderId)} a Piedra, Papel o Tijera.`, 'defense');
+        log(
+          `✂️ ${getCard(defenseCardId).name}: ${nameOf(play.fromId)} vs ${objOf(defenderId)} a Piedra, Papel o Tijera.`,
+          'defense',
+        );
         return;
       }
     }
+  };
+
+  /** Perder el PPT: carta + castigo (Doble o Nada) o carta por el doble de tiempo (Todo o Nada Sensual). */
+  const loseRps = (play: TablePlay, defenderId: string, defenseCardId?: string) => {
+    const doubled = defenseCardId ? getCard(defenseCardId).rpsLose === 'double' : false;
+    const target = { ...play, toId: defenderId };
+    if (doubled) forceOn(target, 'Perdiste el Todo o Nada: la cumplís por el doble de tiempo', true, false, 2);
+    else forceOn(target, 'Perdió el Doble o Nada: cumple la carta y además va a la ruleta', true, true);
   };
 
   /** Lógica común de una carta de Acción jugada por cualquier jugador. */
@@ -588,11 +639,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const prof = profileRef.current;
     const deck = deckOf(mode);
     setDecks({ ...decksRef.current, [mode]: deck });
-    const slots = slotsFor(tableSize);
+    const size = handSizeFor(tableSize);
+    const unlocked = unlockedNow();
     const reserved: string[] = [];
     const deal = (def: boolean) =>
-      Array.from({ length: slots }, () => {
-        const id = drawCard(deck, def, reserved);
+      Array.from({ length: def ? size.defenses : size.actions }, () => {
+        const id = drawCard(deck, def, unlocked, reserved);
         if (id) reserved.push(id);
         return id;
       })
@@ -606,7 +658,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       isMe: true,
       actions: deal(false),
       defenses: deal(true),
-      actionRefills: 0,
     };
   };
 
@@ -631,7 +682,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         tone: 'system',
         text:
           kind === 'friends'
-            ? `Sala ${code} abierta. Compartí el código para que se sumen tus amigos.`
+            ? mode === 'hot'
+              ? `Sala HOT ${code} abierta. Pasale el código a tu pareja.`
+              : `Sala ${code} abierta. Compartí el código para que se sumen tus amigos.`
             : `Modo prueba ${code}: ${players.length - 1} bots en la mesa.`,
       },
     ],
@@ -642,23 +695,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     transportRef.current.disconnect();
     transportRef.current = createLocalTransport();
     const mode = settings.mode;
-    const total = kind === 'bots' ? bots + 1 : 1;
+    const botCount = Math.max(1, Math.min(bots, MAX_PLAYERS[mode] - 1));
+    const total = kind === 'bots' ? botCount + 1 : 1;
     const me = buildMe(mode, total);
 
     if (kind === 'bots') {
-      const slots = slotsFor(total);
+      const size = handSizeFor(total);
       const names = BOT_NAMES.filter((n) => n.toLowerCase() !== me.name.toLowerCase())
         .sort(() => Math.random() - 0.5)
-        .slice(0, bots);
+        .slice(0, botCount);
       const botPlayers: Player[] = names.map((name, i) => ({
         id: uid('bot_'),
         name,
         color: AVATAR_COLORS[(AVATAR_COLORS.indexOf(me.color) + i + 1) % AVATAR_COLORS.length],
         isBot: true,
         isMe: false,
-        actions: Array.from({ length: slots }, () => handCard(randomActionCard(mode))),
-        defenses: Array.from({ length: slots }, () => handCard(randomDefenseCard(mode))),
-        actionRefills: 0,
+        actions: Array.from({ length: size.actions }, () => handCard(randomActionCard(mode))),
+        defenses: Array.from({ length: size.defenses }, () => handCard(randomDefenseCard(mode))),
       }));
       const r = baseRoom(roomCode(), mode, 'bots', [me, ...botPlayers]);
       send({ type: 'SET_ROOM', room: r });
@@ -689,6 +742,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!res.ok) throw new Error('No se pudo conectar con la sala');
     const snap = (await res.json()) as Snapshot;
     const r = snap.room!;
+    const already = r.players.some((p) => p.id === profileRef.current.id);
+    if (!already && r.players.length >= MAX_PLAYERS[r.mode]) {
+      throw new Error(r.mode === 'hot' ? 'Esa sala HOT ya tiene a la pareja completa' : 'La sala está llena (12 jugadores)');
+    }
     clearTimers();
     setSettings((s) => ({ ...s, mode: r.mode }));
     setRoom(r);
@@ -727,13 +784,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setDecks({ ...decksRef.current, [mode]: ensureCurrentWeek(null, mode) });
   };
 
+  /** Checkout simulado: destraba las 20 PRO del modo para siempre. */
+  const buyPack = (mode: GameMode) => {
+    const u = ensureUnlocks(unlocksRef.current);
+    if (!u.packs.includes(mode)) setUnlocks({ ...u, packs: [...u.packs, mode] });
+  };
+
+  /** Reto cumplido: la carta PRO queda habilitada hasta el lunes. */
+  const unlockWithChallenge = (cardId: string) => {
+    const u = ensureUnlocks(unlocksRef.current);
+    if (!u.weekly.includes(cardId)) setUnlocks({ ...u, weekly: [...u.weekly, cardId] });
+  };
+
   /* ---------------- acciones públicas: jugadas ---------------- */
 
   const throwAction: GameContextValue['throwAction'] = (handUid, targetId, extra) => {
     const me = player(meId());
     const slot = me?.actions.find((c) => c.uid === handUid && c.state === 'ready');
-    if (!me || !slot || isGagged(me)) return;
-    burn(slot.cardId); // quema permanente hasta el lunes
+    if (!me || !slot || isGagged(me) || !hasBudget(getCard(slot.cardId).mode)) return;
+    burn(slot.cardId); // -1 del presupuesto semanal, no vuelve hasta el lunes
     send({ type: 'SET_CARD_STATE', playerId: me.id, uid: slot.uid, state: 'used' });
     performAttack(me.id, slot.cardId, targetId, extra?.ruleText);
   };
@@ -742,7 +811,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const me = player(meId());
     const target = player(targetId);
     const slot = me?.defenses.find((c) => c.uid === handUid && c.state === 'ready');
-    if (!me || !target || !slot || isImmune(target)) return;
+    if (!me || !target || !slot || isImmune(target) || !hasBudget(getCard(slot.cardId).mode)) return;
     burn(slot.cardId);
     send({ type: 'SET_CARD_STATE', playerId: me.id, uid: slot.uid, state: 'used' });
     send({ type: 'PATCH_PLAYER', playerId: target.id, patch: { gaggedUntil: Date.now() + GAG_MINUTES * MIN } });
@@ -760,7 +829,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (choice === 'defend' && inc.phase === 'defend') {
       const slot =
         me.defenses.find((c) => c.uid === opts.defenseUid && c.state === 'ready') ?? readyCards(me.defenses)[0];
-      if (slot) {
+      if (slot && hasBudget(getCard(slot.cardId).mode)) {
         const def = getCard(slot.cardId);
         burn(def.id);
         send({ type: 'SET_CARD_STATE', playerId: me.id, uid: slot.uid, state: 'used' });
@@ -776,7 +845,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       pushRoulette(me.id, `Se negó a «${name}»`);
       return;
     }
-    applyComply(play, !inc.noPropagate);
+    applyComply(play, !inc.noPropagate, inc.durationFactor ?? 1);
     if (inc.punishAfter) pushRoulette(me.id, 'Perdió el Doble o Nada');
   };
 
@@ -795,8 +864,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'nullified' });
       log(`✂️ ${says(rps.defenderId, 'gana', 'ganás')} el Doble o Nada: carta anulada.`, 'defense');
     } else {
-      log(`✂️ ${says(rps.defenderId, 'pierde', 'perdés')} el Doble o Nada: carta + castigo.`, 'punish');
-      forceOn({ ...play, toId: rps.defenderId }, 'Perdió el Doble o Nada: cumple la carta y además va a la ruleta', true, true);
+      const doubled = rps.defenseCardId && getCard(rps.defenseCardId).rpsLose === 'double';
+      log(
+        `✂️ ${says(rps.defenderId, 'pierde', 'perdés')} ${doubled ? 'el Todo o Nada: cumple por el doble de tiempo' : 'el Doble o Nada: carta + castigo'}.`,
+        'punish',
+      );
+      loseRps(play, rps.defenderId, rps.defenseCardId);
     }
   };
 
@@ -888,6 +961,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     mode: activeMode,
     settings,
     deck: decks[activeMode],
+    decks,
+    unlockedIds: unlockedCardIds(unlocks),
+    unlocks,
+    buyPack,
+    unlockWithChallenge,
     room,
     me,
     online,
