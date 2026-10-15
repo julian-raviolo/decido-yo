@@ -52,7 +52,11 @@ export function IncomingModal({
   const pct = Math.max(0, Math.min(1, remaining / DEFENSE_WINDOW_SECONDS));
 
   const useDefense = (slot: HandCard) => {
-    if (getCard(slot.cardId).defenseEffect === 'REDIRECT' && redirectTargets.length) setRedirectWith(slot);
+    const redirect = getCard(slot.cardId).defenseEffect === 'REDIRECT';
+    // Un solo destino posible: se redirige directo, sin preguntar.
+    if (redirect && redirectTargets.length === 1)
+      onRespond('defend', { redirectTo: redirectTargets[0].id, defenseUid: slot.uid });
+    else if (redirect && redirectTargets.length) setRedirectWith(slot);
     else onRespond('defend', { defenseUid: slot.uid });
   };
 

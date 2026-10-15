@@ -86,6 +86,8 @@ export default function SalaPage() {
   const myEvidence = room.table.find((t) => t.status === 'evidence' && t.toId === me.id && !t.evidence) ?? null;
   const armedCard = armed ? getCard(armed.cardId) : null;
 
+  const soleTarget = others.length === 1 && !isImmune(others[0], now) ? others[0] : null;
+
   const handleThrow = () => {
     if (!focus) return;
     const f = focus;
@@ -96,7 +98,14 @@ export default function SalaPage() {
       const card = getCard(f.cardId);
       if (card.targetMode === 'table') setRuleOpen(true);
       else if (card.targetMode === 'random') game.throwAction(f.uid, null);
-      else setPicker('action');
+      else if (soleTarget) {
+        // Una sola persona más en la sala: no hace falta preguntar a quién.
+        game.throwAction(f.uid, soleTarget.id);
+        setArmed(null);
+      } else setPicker('action');
+    } else if (soleTarget) {
+      game.gagPlayer(f.uid, soleTarget.id);
+      setArmed(null);
     } else {
       setPicker('gag');
     }

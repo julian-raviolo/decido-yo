@@ -340,7 +340,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const activeMode: GameMode = room?.mode ?? settings.mode;
   useEffect(() => {
     document.documentElement.dataset.mode = activeMode;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', activeMode === 'hot' ? '#9E0014' : '#121212');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', activeMode === 'hot' ? '#510c1c' : '#121212');
   }, [activeMode]);
 
   /* ---------------- reglas de mesa: tamaño de la mano ---------------- */
