@@ -114,9 +114,10 @@ export function Sheet({
   );
 }
 
-export function Pill({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Pill({ children, className = '', title }: { children: ReactNode; className?: string; title?: string }) {
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1 rounded-full border-2 border-black px-2 py-0.5 text-[10px] font-black uppercase ${className}`}
     >
       {children}

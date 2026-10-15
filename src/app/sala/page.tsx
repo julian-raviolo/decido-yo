@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, Copy, Flame, Home, Hourglass, ScrollText, LogOut, Share2, Users, WifiOff } from 'lucide-react';
+import { Bot, Copy, Flame, Home, Hourglass, ScrollText, LogOut, Share2, Shield, Users, WifiOff, Zap } from 'lucide-react';
 import { PRICES, SCENARIO_META, WEEKLY_BURNS, formatUSD, getCard, handSizeFor, rechargePrice } from '@/data/cards-catalog';
 import { PayModal } from '@/components/PayModal';
 import { EvidenceModal, EvidencePanel } from '@/components/room/Evidence';
@@ -216,24 +216,25 @@ export default function SalaPage() {
         </div>
       )}
 
-      <div className="flex shrink-0 flex-wrap gap-2">
-          {isFriends && !online && (
-            <Pill className="bg-black text-white">
-              <WifiOff size={11} strokeWidth={3} /> Reconectando…
-            </Pill>
-          )}
-          <Pill className="bg-lime text-black">
-            <Users size={11} strokeWidth={3} /> Mesa de {n}: {hand.actions} Acción + {hand.defenses} Escudo
-            {hand.defenses > 1 ? 's' : ''}
+      {/* Info de la mesa: una sola línea compacta */}
+      <div className="flex shrink-0 items-center gap-1.5 text-[11px] font-black uppercase">
+        {isFriends && !online && (
+          <Pill className="bg-black text-white">
+            <WifiOff size={11} strokeWidth={3} />
           </Pill>
-          <Pill className="bg-panel text-white">
-            {SCENARIO_META[room.scenario].emoji} {SCENARIO_META[room.scenario].label}
-          </Pill>
-          <Pill className={noBudget ? 'bg-special text-white' : 'bg-cream text-black'}>
-            <Flame size={11} strokeWidth={3} /> Usos {budget}/{WEEKLY_BURNS}
-          </Pill>
+        )}
+        <Pill className="bg-lime text-black" title={`Mesa de ${n}: ${hand.actions} Acción + ${hand.defenses} Escudo`}>
+          <Users size={11} strokeWidth={3} /> {n} · <Zap size={11} strokeWidth={3} />
+          {hand.actions} <Shield size={11} strokeWidth={3} />
+          {hand.defenses}
+        </Pill>
+        <Pill className="bg-panel text-white" title={SCENARIO_META[room.scenario].label}>
+          {SCENARIO_META[room.scenario].emoji} {SCENARIO_META[room.scenario].short}
+        </Pill>
+        <Pill className={`ml-auto ${noBudget ? 'bg-special text-white' : 'bg-cream text-black'}`} title="Usos de esta semana">
+          <Flame size={11} strokeWidth={3} /> {budget}/{WEEKLY_BURNS}
+        </Pill>
       </div>
-
 
       {/* Restricciones de cada persona, siempre visibles arriba de la mesa */}
       <RestrictionsBar room={room} now={now} />

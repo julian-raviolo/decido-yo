@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import {
   Bot,
   CalendarClock,
+  ChevronRight,
   Crown,
   Flame,
   Layers,
@@ -171,99 +172,108 @@ export default function HomePage() {
       </div>
 
       {/* Modalidad + escenario */}
-      <section className="flex flex-col gap-3 rounded-3xl border-4 border-black bg-panel p-3.5 shadow-brutal">
-        <div className="text-[11px] font-black uppercase tracking-widest text-white/70">Modalidad</div>
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Modalidad">
-          {(
-            [
-              ['PRESENCIAL', '👥', 'Presencial', 'En persona'],
-              ['ONLINE', '📱', 'Online', 'Cada uno en su casa'],
-            ] as const
-          ).map(([env, emoji, label, sub]) => {
-            const active = settings.environment === env;
-            return (
-              <button
-                key={env}
-                role="radio"
-                aria-checked={active}
-                disabled={!!room}
-                onClick={() => game.setEnvironment(env)}
-                className={`flex items-center gap-2 rounded-2xl border-[3px] border-black px-3 py-2 text-left transition-transform active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-60 ${
-                  active ? 'bg-cream text-black shadow-brutal-accent' : 'bg-black/30 text-white/75 shadow-brutal-sm'
-                }`}
-              >
-                <span className="text-xl">{emoji}</span>
-                <span className="leading-tight">
-                  <span className="block font-display text-sm font-black uppercase">{label}</span>
-                  <span className="block text-[10px] font-semibold opacity-70">{sub}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="text-[11px] font-black uppercase tracking-widest text-white/70">Escenario</div>
-        {settings.environment === 'ONLINE' ? (
-          <div className="flex items-center gap-2 rounded-2xl border-[3px] border-black bg-cream px-3 py-2 text-black shadow-brutal-sm">
-            <span className="text-xl">{SCENARIO_META.REMOTE.emoji}</span>
-            <span className="font-display text-sm font-black uppercase">{SCENARIO_META.REMOTE.label}</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Escenario">
-            {PRESENCIAL_SCENARIOS.map((sc) => {
-              const active = settings.scenario === sc;
+      <section className="flex flex-col gap-2.5 rounded-3xl border-[3px] border-black bg-panel/90 p-3 shadow-brutal-sm">
+        <div className="flex items-center gap-2">
+          <span className="w-[4.6rem] shrink-0 text-[10px] font-black uppercase tracking-widest text-white/60">Modalidad</span>
+          <div
+            className="grid flex-1 grid-cols-2 gap-1 rounded-full border-[3px] border-black bg-black/40 p-1"
+            role="radiogroup"
+            aria-label="Modalidad"
+          >
+            {(
+              [
+                ['PRESENCIAL', '👥', 'Presencial'],
+                ['ONLINE', '📱', 'Online'],
+              ] as const
+            ).map(([env, emoji, label]) => {
+              const active = settings.environment === env;
               return (
                 <button
-                  key={sc}
+                  key={env}
                   role="radio"
                   aria-checked={active}
                   disabled={!!room}
-                  onClick={() => game.setScenario(sc)}
-                  className={`flex items-center gap-2 rounded-2xl border-[3px] border-black px-2.5 py-2 text-left transition-transform active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-60 ${
-                    active ? 'bg-cream text-black shadow-brutal-accent' : 'bg-black/30 text-white/75 shadow-brutal-sm'
+                  onClick={() => game.setEnvironment(env)}
+                  className={`flex items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-black uppercase transition-colors disabled:opacity-60 ${
+                    active ? 'bg-cream text-black' : 'text-white/70'
                   }`}
                 >
-                  <span className="text-lg">{SCENARIO_META[sc].emoji}</span>
-                  <span className="text-[11px] font-black uppercase leading-tight">{SCENARIO_META[sc].label}</span>
+                  <span className="text-sm">{emoji}</span> {label}
                 </button>
               );
             })}
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-[4.6rem] shrink-0 text-[10px] font-black uppercase tracking-widest text-white/60">Escenario</span>
+          {settings.environment === 'ONLINE' ? (
+            <div className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border-[3px] border-black bg-cream py-1.5 text-[11px] font-black uppercase text-black">
+              <span className="text-sm">{SCENARIO_META.REMOTE.emoji}</span> A distancia
+            </div>
+          ) : (
+            <div className="grid flex-1 grid-cols-4 gap-1.5" role="radiogroup" aria-label="Escenario">
+              {PRESENCIAL_SCENARIOS.map((sc) => {
+                const active = settings.scenario === sc;
+                return (
+                  <button
+                    key={sc}
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={SCENARIO_META[sc].label}
+                    disabled={!!room}
+                    onClick={() => game.setScenario(sc)}
+                    className={`flex flex-col items-center rounded-2xl border-[3px] border-black py-1 transition-transform active:translate-y-0.5 disabled:opacity-60 ${
+                      active ? 'bg-cream text-black shadow-brutal-accent' : 'bg-black/30 text-white/70'
+                    }`}
+                  >
+                    <span className="text-lg leading-none">{SCENARIO_META[sc].emoji}</span>
+                    <span className="mt-0.5 text-[9px] font-black uppercase leading-none">{SCENARIO_META[sc].short}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {settings.environment === 'PRESENCIAL' && (
+          <p className="-mt-0.5 text-center text-[10px] font-bold uppercase text-white/50">
+            {SCENARIO_META[settings.scenario === 'REMOTE' ? 'OUTING' : settings.scenario].label}
+          </p>
         )}
       </section>
 
-      {/* Mazo semanal */}
+      {/* Mazo semanal: compacto */}
       <Link
         href="/mazo"
-        className="block rounded-3xl border-4 border-black bg-panel p-4 shadow-brutal-cream transition-transform active:translate-x-1 active:translate-y-1"
+        className="block rounded-3xl border-[3px] border-black bg-panel/90 px-3 py-2.5 shadow-brutal-sm transition-transform active:translate-x-0.5 active:translate-y-0.5"
       >
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2 font-display text-lg font-black uppercase">
-            <Layers size={20} strokeWidth={3} /> Mazo {hot ? 'HOT' : 'semanal'}
+        <div className="flex items-center gap-2">
+          <Layers size={18} strokeWidth={3} className="shrink-0" />
+          <span className="font-display text-sm font-black uppercase">Mazo {hot ? 'HOT' : 'semanal'}</span>
+          <span className="ml-auto flex items-center gap-1 rounded-full border-2 border-black bg-cream px-1.5 text-[10px] font-black text-black">
+            <Zap size={10} strokeWidth={3} /> {activeCardsFor(mode).length}
           </span>
-          <span className="font-display text-2xl font-black text-lime">
+          <span className="flex items-center gap-1 rounded-full border-2 border-black bg-halo px-1.5 text-[10px] font-black text-black">
+            <Crown size={10} strokeWidth={3} /> {proUnlocked}/{pro.length}
+          </span>
+          <ChevronRight size={16} strokeWidth={3} className="text-white/60" />
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Flame size={14} strokeWidth={3} className="shrink-0" style={{ color: hot ? '#FF4D6D' : '#FFD600' }} />
+          <div className="grid flex-1 grid-cols-10 gap-1">
+            {Array.from({ length: WEEKLY_BURNS }, (_, i) => (
+              <span
+                key={i}
+                className="h-2.5 rounded-full border-2 border-black"
+                style={{ backgroundColor: i < left ? (hot ? '#FF4D6D' : '#FFD600') : 'rgba(0,0,0,0.5)' }}
+              />
+            ))}
+          </div>
+          <span className="font-display text-base font-black text-lime">
             {left}/{WEEKLY_BURNS}
           </span>
         </div>
-        <div className="mt-3">
-          <PoolBar
-            icon={<Flame size={14} strokeWidth={3} />}
-            label="Usos esta semana"
-            value={left}
-            max={WEEKLY_BURNS}
-            color={hot ? '#FF4D6D' : '#FFD600'}
-          />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-black uppercase">
-          <span className="flex items-center gap-1 rounded-full border-2 border-black bg-cream px-2 py-0.5 text-black">
-            <Zap size={11} strokeWidth={3} /> {activeCardsFor(mode).length} activas
-          </span>
-          <span className="flex items-center gap-1 rounded-full border-2 border-black bg-halo px-2 py-0.5 text-black">
-            <Crown size={11} strokeWidth={3} /> PRO {proUnlocked}/{pro.length}
-          </span>
-        </div>
-        <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold uppercase text-white/70">
-          <CalendarClock size={13} /> Vuelve a {WEEKLY_BURNS}/{WEEKLY_BURNS} el lunes · faltan{' '}
-          {hydrated ? formatDuration(nextReset(new Date(now)).getTime() - now) : '…'}
+        <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold uppercase text-white/55">
+          <CalendarClock size={11} /> Se renueva en {hydrated ? formatDuration(nextReset(new Date(now)).getTime() - now) : '…'}
         </div>
       </Link>
 
@@ -418,41 +428,6 @@ function ModeButton({
     >
       {children}
     </button>
-  );
-}
-
-function PoolBar({
-  icon,
-  label,
-  value,
-  max,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  max: number;
-  color: string;
-}) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-[11px] font-black uppercase">
-        <span className="flex items-center gap-1">
-          {icon} {label}
-        </span>
-        <span>
-          {value}/{max}
-        </span>
-      </div>
-      <div className="h-4 overflow-hidden rounded-full border-[3px] border-black bg-black">
-        <motion.div
-          className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-          initial={false}
-          animate={{ width: `${(value / max) * 100}%` }}
-        />
-      </div>
-    </div>
   );
 }
 
