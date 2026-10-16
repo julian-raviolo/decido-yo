@@ -36,7 +36,7 @@ export default function MazoPage() {
   const proUnlocked = hydrated ? pro.filter((c) => unlockedIds.includes(c.id)).length : 0;
 
   return (
-    <div className="flex flex-1 flex-col gap-5 pb-8">
+    <div className="flex flex-1 flex-col gap-4 pb-8">
       <header className="flex items-center gap-3">
         <Link
           href="/"

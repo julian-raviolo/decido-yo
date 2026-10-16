@@ -14,6 +14,18 @@ const SIZES: Record<Size, { box: string; circle: string; icon: number; title: st
   lg: { box: 'w-[268px] h-[380px] rounded-3xl border-4', circle: 'w-[132px] h-[132px] border-4', icon: 68, title: 'text-2xl', pad: 'p-4' },
 };
 
+/** Tamaño base del título por tamaño de carta (el mismo que la clase `title`). */
+const TITLE_BASE: Record<Size, string> = { mini: '8px', md: '9px', hand: '11px', sm: '13px', lg: '1.5rem' };
+
+/**
+ * El título nunca corta una palabra ni se sale de la carta: si la palabra más larga
+ * no entra en el ancho (≈0.82em por letra en Arial Black mayúscula), se achica lo justo.
+ */
+function titleFontSize(name: string, size: Size) {
+  const longest = Math.max(...name.split(/\s+/).map((w) => [...w].length));
+  return `min(${TITLE_BASE[size]}, ${(100 / (longest * 0.82)).toFixed(2)}cqw)`;
+}
+
 /** Aureola sutil (ángel) o cuernitos (diablo) sobre el círculo central. */
 function HotOrnament({ kind, size }: { kind: 'ANGEL' | 'DEVIL'; size: Size }) {
   const w = size === 'lg' ? 96 : size === 'sm' ? 56 : size === 'hand' ? 44 : 34;
@@ -104,8 +116,11 @@ export function GameCard({ cardId, size = 'sm', state = 'ready', lockLabel, show
         </div>
       </div>
 
-      <div className="relative z-10 flex w-full flex-col items-center gap-1 text-center">
-        <h3 className={`${s.title} font-display font-black uppercase leading-[1.05] tracking-tight`}>
+      <div className="relative z-10 flex w-full flex-col items-center gap-1 text-center [container-type:inline-size]">
+        <h3
+          className={`${s.title} font-display font-black uppercase leading-[1.05] tracking-tight`}
+          style={{ fontSize: titleFontSize(card.name, size) }}
+        >
           {card.name}
         </h3>
         {describe && (

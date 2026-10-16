@@ -59,22 +59,42 @@ export function Avatar({
   );
 }
 
+/** Luminancia relativa (WCAG) de un color #RRGGBB; null si no es hex. */
+function luminance(hex: string) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(m[1].slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Tinta del título según el fondo: negro salvo que el negro no llegue a 4.5:1 (bordó HOT, paneles oscuros). */
+function inkFor(tone: string) {
+  const l = luminance(tone);
+  return l !== null && (l + 0.05) / 0.05 < 4.5 ? 'text-cream' : 'text-black';
+}
+
 /** Modal a pantalla completa centrado dentro del contenedor mobile. */
 export function Sheet({
   open,
   onClose,
+  onExitComplete,
   title,
   children,
   tone = '#FFFDF7',
 }: {
   open: boolean;
   onClose?: () => void;
+  /** Se llama cuando terminó de bajar (para encadenar otro overlay sin superponerse). */
+  onExitComplete?: () => void;
   title?: ReactNode;
   children: ReactNode;
   tone?: string;
 }) {
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExitComplete}>
       {open && (
         <motion.div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-[2px]"
@@ -93,13 +113,13 @@ export function Sheet({
             onClick={(e) => e.stopPropagation()}
           >
             {(title || onClose) && (
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <h2 className="font-display text-xl font-black uppercase leading-tight">{title}</h2>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className={`min-w-0 font-display text-xl font-black uppercase leading-tight ${inkFor(tone)}`}>{title}</h2>
                 {onClose && (
                   <button
                     onClick={onClose}
                     aria-label="Cerrar"
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full border-[3px] border-black bg-white shadow-brutal-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full border-[3px] border-black bg-cream text-black shadow-brutal-sm active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
                   >
                     <X size={20} strokeWidth={3} />
                   </button>
