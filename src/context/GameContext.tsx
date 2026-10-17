@@ -13,6 +13,7 @@ import {
   hasCard,
 } from '@/data/cards-catalog';
 import { BOT_RULES, HOT_BOT_RULES } from '@/data/punishments';
+import { VENUES, getVenue, hasVenue } from '@/data/venues-catalog';
 import {
   burnCard,
   addBurns,
@@ -46,6 +47,8 @@ import type {
   Player,
   Profile,
   Room,
+  RpsChoice,
+  Saliduelo,
   Scenario,
   TablePlay,
   Unlocks,
@@ -60,6 +63,13 @@ const MIN = 60_000;
 /** Modo Online: tiempo para subir la prueba y para votar. */
 const EVIDENCE_SECONDS = 120;
 const VOTE_SECONDS = 90;
+/** PPT: tiempo para elegir antes de que se juegue al azar por el ausente. */
+export const RPS_CHOOSE_SECONDS = 60;
+/** PPT: conteo + revelado antes de aplicar el resultado (la UI anima en ese lapso). */
+export const RPS_REVEAL_MS = 3600;
+const RPS_BEATS: Record<RpsChoice, RpsChoice> = { ROCK: 'SCISSORS', PAPER: 'ROCK', SCISSORS: 'PAPER' };
+const RPS_LABEL: Record<RpsChoice, string> = { ROCK: '🪨 Piedra', PAPER: '📄 Papel', SCISSORS: '✂️ Tijera' };
+const randomRps = (): RpsChoice => pickRandom(['ROCK', 'PAPER', 'SCISSORS'] as const);
 
 export const isGagged = (p?: Player | null, now = Date.now()) => !!p?.gaggedUntil && p.gaggedUntil > now;
 export const isImmune = (p?: Player | null, now = Date.now()) => !!p?.immuneUntil && p.immuneUntil > now;
@@ -72,6 +82,7 @@ const DEFAULT_SETTINGS: Settings = {
   hotConfirmed: false,
   environment: 'PRESENCIAL',
   scenario: 'OUTING',
+  saliduelo: false,
 };
 
 interface Settings {
@@ -80,6 +91,8 @@ interface Settings {
   environment: Environment;
   /** Escenario presencial elegido (ONLINE usa siempre REMOTE). */
   scenario: Scenario;
+  /** Crear la sala con la variante ⚔️ SALIDUELO. */
+  saliduelo: boolean;
 }
 
 interface GameContextValue {
@@ -105,6 +118,10 @@ interface GameContextValue {
   confirmHot(): void;
   setEnvironment(env: Environment): void;
   setScenario(scenario: Scenario): void;
+  setSaliduelo(value: boolean): void;
+  /** ⚔️ SALIDUELO: elegir lugar (o sumarse a un bando) y arrancar la batalla. */
+  pickVenue(venueId: string): void;
+  startSaliduelo(): void;
   /** Economía: re-barajados gratis restantes esta semana y compras simuladas. */
   economy: Economy;
   /** Re-barajar mano: gratis (2 por semana) o pago simulado ($0.50). */
@@ -127,7 +144,8 @@ interface GameContextValue {
     opts?: { redirectTo?: string; defenseUid?: string },
   ): void;
   expireIncoming(id: string): void;
-  resolveRps(defenderWins: boolean): void;
+  /** Piedra, Papel o Tijera: mi jugada (la resolución la hace un solo dispositivo). */
+  chooseRps(choice: RpsChoice): void;
   finishRoulette(id: string, punishment: string): void;
   /* Modo prueba */
   simulateBotAttack(botId: string, cardId?: string): void;
@@ -285,7 +303,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setUnlocks(ensureUnlocks(storage.get<Unlocks | null>(STORAGE_KEYS.unlocks, null)));
     const savedRoom = storage.get<Room | null>(STORAGE_KEYS.room, null);
     // Si el catálogo cambió y la sala guardada tiene cartas que ya no existen, se descarta.
-    const validCards = savedRoom?.players?.every((x) => [...x.actions, ...x.defenses].every((c) => hasCard(c.cardId)));
+    const validCards =
+      savedRoom?.players?.every((x) => [...x.actions, ...x.defenses].every((c) => hasCard(c.cardId))) &&
+      (!savedRoom.saliduelo ||
+        Object.values(savedRoom.saliduelo.sides ?? {}).every((d) => !d || hasVenue(d.venueId)));
     if (validCards && savedRoom?.players?.some((x) => x.id === p.id)) {
       setRoom(savedRoom);
       connect(savedRoom);
@@ -508,6 +529,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       send({ type: 'SET_PLAY_STATUS', playId, status: 'refused' });
       log(`🙅 ${bot.name} se niega a «${card.name}» → Ruleta.`, 'punish');
       pushRoulette(bot.id, `Se negó a «${card.name}»`);
+      saliDamage(bot.id, playId);
       return;
     }
     applyComply(play, propagate, durationFactor);
@@ -639,7 +661,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         send({
           type: 'SET_RPS',
-          rps: { id: uid('rps_'), playId: play.id, cardId: play.cardId, attackerId: play.fromId, defenderId, defenseCardId },
+          rps: {
+            id: uid('rps_'),
+            playId: play.id,
+            cardId: play.cardId,
+            attackerId: play.fromId,
+            defenderId,
+            defenseCardId,
+            choices: {},
+            round: 0,
+            roundAt: Date.now(),
+          },
         });
         log(
           `✂️ ${getCard(defenseCardId).name}: ${nameOf(play.fromId)} vs ${objOf(defenderId)} a Piedra, Papel o Tijera.`,
@@ -735,6 +767,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     players: Player[],
     environment: Environment,
     scenario: Scenario,
+    saliduelo: boolean,
   ): Room => ({
     code,
     createdAt: Date.now(),
@@ -751,17 +784,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     roulettes: [],
     effects: [],
     rules: [],
+    ...(saliduelo ? { saliduelo: { phase: 'pick', sides: {}, picks: {}, hits: [] } satisfies Saliduelo } : {}),
     log: [
       {
         id: uid('l_'),
         at: Date.now(),
         tone: 'system',
         text:
-          kind === 'friends'
+          (kind === 'friends'
             ? mode === 'hot'
               ? `Sala HOT ${code} abierta. Pasale el código a tu pareja.`
               : `Sala ${code} abierta. Compartí el código para que se sumen tus amigos.`
-            : `Modo prueba ${code}: ${players.length - 1} bots en la mesa.`,
+            : `Modo prueba ${code}: ${players.length - 1} bots en la mesa.`) +
+          (saliduelo ? ' ⚔️ SALIDUELO: cada uno elige a dónde ir y se defiende con 3 ❤️.' : ''),
       },
     ],
   });
@@ -791,13 +826,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         actions: Array.from({ length: size.actions }, () => handCard(randomActionCard(mode, scenario))),
         defenses: Array.from({ length: size.defenses }, () => handCard(randomDefenseCard(mode, scenario))),
       }));
-      const r = baseRoom(roomCode(), mode, 'bots', [me, ...botPlayers], environment, scenario);
+      const r = baseRoom(roomCode(), mode, 'bots', [me, ...botPlayers], environment, scenario, settings.saliduelo);
       send({ type: 'SET_ROOM', room: r });
       return r.code;
     }
 
     for (let attempt = 0; attempt < 4; attempt++) {
-      const r = baseRoom(roomCode(), mode, 'friends', [me], environment, scenario);
+      const r = baseRoom(roomCode(), mode, 'friends', [me], environment, scenario, settings.saliduelo);
       const res = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -966,6 +1001,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'refused' });
         log(`👎 ${why} «${card.name}» → Ruleta.`, 'punish');
         pushRoulette(play.toId!, `No convenció con «${card.name}»`);
+        saliDamage(play.toId!, play.id);
       };
       if (!play.evidence) {
         if (now > (play.evidenceUntil ?? 0)) fail(`${says(play.toId, 'no mostró', 'no mostraste')} la prueba de`);
@@ -1051,6 +1087,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'refused' });
       log(`🙅 ${says(me.id, 'se niega', 'te negaste')} a «${name}» → Ruleta.`, 'punish');
       pushRoulette(me.id, `Se negó a «${name}»`);
+      saliDamage(me.id, play.id);
       return;
     }
     applyComply(play, !inc.noPropagate, inc.durationFactor ?? 1);
@@ -1079,6 +1116,173 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       );
       loseRps(play, rps.defenderId, rps.defenseCardId);
     }
+  };
+
+  /* ---------------- Piedra, Papel o Tijera sincronizado ---------------- */
+
+  const chooseRps: GameContextValue['chooseRps'] = (choice) => {
+    const rps = roomRef.current?.rps;
+    const id = meId();
+    if (!rps || (rps.attackerId !== id && rps.defenderId !== id) || rps.choices?.[id]) return;
+    send({ type: 'RPS_CHOOSE', rpsId: rps.id, playerId: id, choice, at: Date.now() });
+  };
+
+  /**
+   * Aplica el resultado de la ronda. Idempotente: sólo actúa si el PPT y la ronda
+   * siguen vigentes y están las dos jugadas.
+   */
+  const settleRps = (rpsId: string, round: number) => {
+    const rps = roomRef.current?.rps;
+    if (!rps || rps.id !== rpsId || (rps.round ?? 0) !== round) return;
+    const a = rps.choices?.[rps.attackerId];
+    const d = rps.choices?.[rps.defenderId];
+    if (!a || !d) return;
+    if (a === d) {
+      send({ type: 'RPS_NEXT_ROUND', rpsId, round, at: Date.now() });
+      log(`🤝 PPT: empate a ${RPS_LABEL[a]}. ¡Va de nuevo!`, 'system');
+      return;
+    }
+    const defenderWins = RPS_BEATS[d] === a;
+    log(
+      `✂️ PPT: ${nameOf(rps.defenderId)} ${RPS_LABEL[d]} vs ${nameOf(rps.attackerId)} ${RPS_LABEL[a]}.`,
+      'system',
+    );
+    resolveRps(defenderWins);
+  };
+
+  /** Bots que juegan PPT, quién resuelve y timeout por ausencia. */
+  const rpsScheduled = useRef(new Set<string>());
+  const rpsTick = useRef<() => void>(() => {});
+  rpsTick.current = () => {
+    const r = roomRef.current;
+    const rps = r?.rps;
+    if (!r || !rps) return;
+    const id = meId();
+    const round = rps.round ?? 0;
+    const key = `${rps.id}:${round}`;
+    const attacker = player(rps.attackerId);
+    const defender = player(rps.defenderId);
+    if (!attacker || !defender) return;
+    const choices = rps.choices ?? {};
+    const participants = [attacker, defender];
+    const imIn = participants.some((p) => p.id === id);
+    if (!imIn) return;
+    // Un solo dispositivo decide: el del defensor si es humano; si no, el del atacante.
+    const resolverId = defender.isBot ? attacker.id : defender.id;
+    const sched = (tag: string, ms: number, fn: () => void) => {
+      const k = `${key}:${tag}`;
+      if (rpsScheduled.current.has(k)) return;
+      rpsScheduled.current.add(k);
+      later(ms, fn);
+    };
+
+    // Bot rival: elige al azar un ratito después de que el humano eligió.
+    for (const bot of participants.filter((p) => p.isBot && !choices[p.id])) {
+      const human = participants.find((p) => p.id !== bot.id);
+      if (human && choices[human.id]) {
+        sched(`bot-${bot.id}`, 600 + Math.random() * 300, () =>
+          send({ type: 'RPS_CHOOSE', rpsId: rps.id, playerId: bot.id, choice: randomRps(), at: Date.now() }),
+        );
+      }
+    }
+
+    const both = !!choices[attacker.id] && !!choices[defender.id];
+    if (both) {
+      if (id === resolverId) sched('settle', RPS_REVEAL_MS, () => settleRps(rps.id, round));
+      // Respaldo: si el que resuelve se colgó, el otro participante resuelve un rato después.
+      else sched('settle-backup', RPS_REVEAL_MS + 8000, () => settleRps(rps.id, round));
+      return;
+    }
+
+    // Nadie eligió a tiempo: se juega al azar por el ausente (RPS_CHOOSE es idempotente).
+    const startedAt = rps.roundAt ?? 0;
+    const grace = id === resolverId ? 0 : 5000;
+    if (startedAt && Date.now() - startedAt > RPS_CHOOSE_SECONDS * 1000 + grace) {
+      for (const p of participants.filter((x) => !choices[x.id])) {
+        if (p.isBot) continue;
+        send({ type: 'RPS_CHOOSE', rpsId: rps.id, playerId: p.id, choice: randomRps(), at: Date.now() });
+        log(`⏱️ ${says(p.id, 'tardó', 'tardaste')} en elegir: PPT al azar.`, 'system');
+      }
+    }
+  };
+  useEffect(() => {
+    rpsTick.current();
+  }, [room?.rps]);
+  useEffect(() => {
+    const t = setInterval(() => rpsTick.current(), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  /* ---------------- ⚔️ SALIDUELO ---------------- */
+
+  const venueName = (sd: Saliduelo | undefined, side: 'A' | 'B') => {
+    const v = sd?.sides[side];
+    return v ? getVenue(v.venueId).name : '¿?';
+  };
+
+  /** La víctima no cumplió: su lugar pierde 1 ❤️ (una sola vez por jugada). */
+  const saliDamage = (victimId: string, playId: string) => {
+    const sd = roomRef.current?.saliduelo;
+    const side = sd?.picks[victimId];
+    if (!sd || sd.phase !== 'battle' || !side || !sd.sides[side] || sd.hits.includes(playId)) return;
+    send({ type: 'SALIDUELO_DAMAGE', playId, playerId: victimId, at: Date.now() });
+    const after = roomRef.current?.saliduelo;
+    const hearts = after?.sides[side]?.hearts ?? 0;
+    log(`💔 «${venueName(after, side)}» pierde un corazón (quedan ${hearts}).`, 'punish');
+    if (after?.phase === 'won' && after.winner) {
+      log(`🏆 ¡«${venueName(after, after.winner)}» gana el SALIDUELO! Cupón desbloqueado.`, 'system');
+    }
+  };
+
+  /** Bots del modo prueba: eligen lugar al azar (el primero que falte arma el Lugar B). */
+  const botPickVenue = (botId: string) => {
+    const r = roomRef.current;
+    const sd = r?.saliduelo;
+    if (!r || !sd || sd.phase === 'won' || sd.picks[botId] || !player(botId)) return;
+    let venueId: string;
+    if (!sd.sides.A) venueId = pickRandom(VENUES).id;
+    else if (!sd.sides.B) venueId = pickRandom(VENUES.filter((v) => v.id !== sd.sides.A!.venueId)).id;
+    else venueId = (Math.random() < 0.5 ? sd.sides.A : sd.sides.B)!.venueId;
+    announcePick(botId, venueId);
+  };
+
+  const announcePick = (playerId: string, venueId: string) => {
+    const before = roomRef.current?.saliduelo;
+    send({ type: 'SALIDUELO_PICK', playerId, venueId });
+    const after = roomRef.current?.saliduelo;
+    const side = after?.picks[playerId];
+    if (!after || !side || (before?.picks[playerId] === side && before.sides[side]?.venueId === after.sides[side]?.venueId))
+      return;
+    const created = before?.sides[side]?.venueId !== after.sides[side]?.venueId;
+    log(
+      created
+        ? `📍 ${says(playerId, 'propone', 'proponés')} «${venueName(after, side)}»: es el Lugar ${side}.`
+        : `🤝 ${says(playerId, 'se suma', 'te sumás')} al bando de «${venueName(after, side)}».`,
+      'system',
+    );
+    if (before?.phase === 'pick' && after.phase === 'battle') announceBattle(after);
+  };
+
+  const announceBattle = (sd: Saliduelo) =>
+    log(`⚔️ ¡Arranca el SALIDUELO! «${venueName(sd, 'A')}» vs «${venueName(sd, 'B')}». El que se niega, le saca un ❤️ a su lugar.`, 'system');
+
+  const pickVenue: GameContextValue['pickVenue'] = (venueId) => {
+    const r = roomRef.current;
+    if (!r?.saliduelo) return;
+    announcePick(meId(), venueId);
+    if (r.kind === 'bots') {
+      roomRef.current?.players
+        .filter((p) => p.isBot && !roomRef.current?.saliduelo?.picks[p.id])
+        .forEach((b, i) => later(700 + i * 450 + Math.random() * 300, () => botPickVenue(b.id)));
+    }
+  };
+
+  const startSaliduelo = () => {
+    const sd = roomRef.current?.saliduelo;
+    if (!sd || sd.phase !== 'pick' || !sd.sides.A || !sd.sides.B) return;
+    send({ type: 'SALIDUELO_START' });
+    const after = roomRef.current?.saliduelo;
+    if (after?.phase === 'battle') announceBattle(after);
   };
 
   const finishRoulette = (id: string, punishment: string) => {
@@ -1129,6 +1333,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const setBotAuto = (value: boolean) => send({ type: 'SET_BOT_AUTO', value });
   const setEnvironment = (environment: Environment) => setSettings((s) => ({ ...s, environment }));
   const setScenario = (scenario: Scenario) => setSettings((s) => ({ ...s, scenario }));
+  const setSaliduelo = (saliduelo: boolean) => setSettings((s) => ({ ...s, saliduelo }));
 
   // Bots autónomos: cada ~12s un bot puede tirar una carta a alguien.
   const autoRef = useRef<() => void>(() => {});
@@ -1186,6 +1391,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     confirmHot,
     setEnvironment,
     setScenario,
+    setSaliduelo,
+    pickVenue,
+    startSaliduelo,
     economy,
     reshuffleHand,
     rechargeHand,
@@ -1199,7 +1407,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     gagPlayer,
     respondIncoming,
     expireIncoming,
-    resolveRps,
+    chooseRps,
     finishRoulette,
     simulateBotAttack,
     simulateBotGag,

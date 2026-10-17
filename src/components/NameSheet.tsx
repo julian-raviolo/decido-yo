@@ -6,6 +6,7 @@ import { Avatar, BrutalButton, Sheet } from '@/components/ui';
 /** Popup para poner (o cambiar) el nombre con el que te ven en la mesa. */
 export function NameSheet({
   open,
+  firstTime = false,
   initial,
   color,
   hot,
@@ -14,6 +15,8 @@ export function NameSheet({
   onExited,
 }: {
   open: boolean;
+  /** Sin nombre guardado: popup limpio, sin cerrar, con "Continuar". */
+  firstTime?: boolean;
   initial: string;
   color: string;
   hot: boolean;
@@ -23,17 +26,23 @@ export function NameSheet({
   onExited?: () => void;
 }) {
   const [draft, setDraft] = useState(initial);
+  // Se congela al abrir: así el botón no cambia de texto mientras el popup baja.
+  const [first, setFirst] = useState(firstTime);
   const ok = draft.trim().length >= 2;
 
   // Al abrir, parte del nombre actual.
   useEffect(() => {
     if (open) setDraft(initial);
   }, [open, initial]);
+  useEffect(() => {
+    if (open) setFirst(firstTime);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={first ? undefined : onClose}
       onExitComplete={onExited}
       title="¿Cómo te llamás?"
       tone={hot ? '#9E0014' : undefined}
@@ -46,7 +55,7 @@ export function NameSheet({
         }}
       >
         <p className={`-mt-2 text-sm font-semibold ${hot ? 'text-cream/80' : 'text-black/70'}`}>
-          Así te van a ver en la mesa.
+          {first ? 'Poné tu nombre para entrar: así te van a ver en la mesa.' : 'Así te van a ver en la mesa.'}
         </p>
         <div className="flex items-center gap-3">
           <Avatar name={draft || '?'} color={color} size={52} />
@@ -63,7 +72,7 @@ export function NameSheet({
           />
         </div>
         <BrutalButton type="submit" variant="lime" disabled={!ok} className="w-full">
-          Listo
+          {first ? 'Continuar' : 'Guardar'}
         </BrutalButton>
       </form>
     </Sheet>

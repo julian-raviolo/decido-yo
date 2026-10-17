@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bot, Copy, Flame, Home, Hourglass, ScrollText, LogOut, Share2, Shield, Users, WifiOff, Zap } from 'lucide-react';
 import { PRICES, SCENARIO_META, WEEKLY_BURNS, formatUSD, getCard, handSizeFor, rechargePrice } from '@/data/cards-catalog';
@@ -12,6 +12,7 @@ import { IncomingModal } from '@/components/room/IncomingModal';
 import { PlayersBar } from '@/components/room/PlayersBar';
 import { RouletteModal } from '@/components/room/RouletteModal';
 import { RpsModal } from '@/components/room/RpsModal';
+import { DuelBoard, SaliduelVictory, VenuePicker } from '@/components/room/Saliduelo';
 import { BotSheet, RuleSheet, VictimPicker } from '@/components/room/Sheets';
 import { ActiveBar } from '@/components/room/ActiveBar';
 import { RestrictionsBar } from '@/components/room/RestrictionsBar';
@@ -35,6 +36,8 @@ export default function SalaPage() {
   const [logOpen, setLogOpen] = useState(false);
   const [pay, setPay] = useState<'reshuffle' | 'recharge' | null>(null);
   const [seenLog, setSeenLog] = useState(0);
+  const [venueOpen, setVenueOpen] = useState(false);
+  const [victoryOpen, setVictoryOpen] = useState(false);
   useEffect(() => {
     if (logOpen && room) setSeenLog(room.log.length);
   }, [logOpen, room]);
@@ -50,6 +53,31 @@ export default function SalaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingId]);
 
+  // ⚔️ SALIDUELO: al entrar sin lugar elegido se abre el selector (una vez).
+  const sd = room?.saliduelo;
+  const needsPick = !!sd && !!me && sd.phase !== 'won' && !sd.picks[me.id];
+  const busyOverlay = !!(room?.incoming.some((i) => i.targetId === me?.id) || room?.rps);
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (!needsPick || busyOverlay || autoPicked.current) return;
+    autoPicked.current = true;
+    setVenueOpen(true);
+  }, [needsPick, busyOverlay]);
+
+  // Victoria: se abre sola una vez por sala en cada celular (después, tocando el duelo).
+  const wonKey = sd?.phase === 'won' && room ? `decido-yo:saliduelo-won:${room.code}:${sd.winner}` : null;
+  useEffect(() => {
+    if (!wonKey) return;
+    try {
+      if (sessionStorage.getItem(wonKey)) return;
+      sessionStorage.setItem(wonKey, '1');
+    } catch {
+      /* sin storage: se muestra igual */
+    }
+    setVenueOpen(false);
+    setVictoryOpen(true);
+  }, [wonKey]);
+
   if (!hydrated || !room || !me) {
     return <div className="grid flex-1 place-items-center font-display font-black uppercase text-white/50">Cargando mesa…</div>;
   }
@@ -59,7 +87,9 @@ export default function SalaPage() {
   const others = room.players.filter((p) => !p.isMe);
   const isFriends = room.kind === 'friends';
   const nameOf = (id: string) => room.players.find((p) => p.id === id)?.name ?? '¿?';
+  // PPT: los que juegan lo ven primero; los terceros lo miran cuando no tienen nada propio pendiente.
   const rps = room.rps && (room.rps.attackerId === me.id || room.rps.defenderId === me.id) ? room.rps : null;
+  const rpsWatch = room.rps && !rps ? room.rps : null;
   const roulette =
     room.roulettes.find((r) => r.playerId === me.id) ??
     room.roulettes.find((r) => room.players.find((p) => p.id === r.playerId)?.isBot) ??
@@ -184,6 +214,7 @@ export default function SalaPage() {
       {/* Jugadores */}
       <PlayersBar
         players={room.players}
+        sides={room.saliduelo?.picks}
         now={now}
         acting={acting}
         onSelect={(p) => {
@@ -271,7 +302,20 @@ export default function SalaPage() {
           </div>
         )}
         <EvidencePanel room={room} meId={me.id} now={now} onVote={game.voteEvidence} />
-        <TableZone room={room} />
+        <TableZone
+          room={room}
+          duel={
+            room.saliduelo && (
+              <DuelBoard
+                room={room}
+                meId={me.id}
+                onPick={() => setVenueOpen(true)}
+                onStart={game.startSaliduelo}
+                onOpenVictory={() => setVictoryOpen(true)}
+              />
+            )
+          }
+        />
       </div>
 
       {/* Mano */}
@@ -375,8 +419,21 @@ export default function SalaPage() {
         onClose={() => setPay(null)}
       />
 
+      {room.saliduelo && (
+        <>
+          <VenuePicker
+            open={venueOpen}
+            room={room}
+            meId={me.id}
+            onPick={game.pickVenue}
+            onClose={() => setVenueOpen(false)}
+          />
+          <SaliduelVictory open={victoryOpen} room={room} meId={me.id} onClose={() => setVictoryOpen(false)} />
+        </>
+      )}
+
       {rps ? (
-        <RpsModal rps={rps} players={room.players} onResolve={game.resolveRps} />
+        <RpsModal rps={rps} players={room.players} now={now} onChoose={game.chooseRps} />
       ) : incoming ? (
         <IncomingModal
           incoming={incoming}
@@ -402,6 +459,8 @@ export default function SalaPage() {
           mode={room.mode}
           onDone={(p) => game.finishRoulette(roulette.id, p)}
         />
+      ) : rpsWatch ? (
+        <RpsModal rps={rpsWatch} players={room.players} now={now} onChoose={() => {}} />
       ) : null}
     </div>
   );

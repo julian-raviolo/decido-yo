@@ -62,14 +62,18 @@ const SLIDES: Slide[] = [
   {
     title: 'Tu mano',
     line: (hot) =>
-      hot ? 'Diablitos para tentar y un ángel para zafar.' : 'Cartas de Acción para tirar y un Escudo para cubrirte.',
+      hot
+        ? 'Te tocan al azar: diablitos para tentar y un ángel para zafar.'
+        : 'Te toca al azar: cartas de Acción para tirar y un Escudo para cubrirte.',
     ms: 4500,
     Art: HandArt,
   },
   {
     title: 'Tirá una carta',
     line: (hot) =>
-      hot ? 'Elegí la tentación y deslizala hacia tu pareja.' : 'Elegí carta y víctima. Deslizá para arriba y ¡zas!',
+      hot
+        ? 'Elegí la tentación y deslizala hacia tu pareja: esa carta se quema.'
+        : 'Elegí carta y víctima. Deslizá para arriba y ¡zas! Esa carta se quema.',
     ms: 4500,
     Art: ThrowArt,
   },
@@ -78,6 +82,15 @@ const SLIDES: Slide[] = [
     line: () => 'Tenés 60 s: escudo o lo hacés. ¿Te negás? Ruleta de castigo.',
     ms: 5500,
     Art: DefendArt,
+  },
+  {
+    title: '⚔️ Saliduelo',
+    line: (hot) =>
+      hot
+        ? 'Cada uno defiende su lugar con 3 ❤️. El que no cumple pierde uno: el que queda en pie elige la salida.'
+        : 'Cada bando defiende un lugar con 3 ❤️. El que no cumple pierde uno: el que queda en pie elige la salida.',
+    ms: 6000,
+    Art: DuelArt,
   },
   {
     title: `${WEEKLY_BURNS} usos por semana`,
@@ -589,5 +602,104 @@ function BurnsArt({ reduce }: SlideProps) {
         </Pill>
       </motion.div>
     </div>
+  );
+}
+
+/** Dos lugares con 3 ❤️: A pierde de a uno (shake + corazón roto) y gana B. */
+function DuelArt({ reduce }: SlideProps) {
+  const [lost, setLost] = useState(reduce ? 3 : 0);
+  useEffect(() => {
+    if (reduce) {
+      setLost(3);
+      return;
+    }
+    const ts = [900, 1900, 2900].map((ms, i) => setTimeout(() => setLost(i + 1), ms));
+    return () => ts.forEach(clearTimeout);
+  }, [reduce]);
+  const done = lost >= 3;
+
+  return (
+    <div className="relative flex w-[300px] flex-col items-center gap-4">
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <DuelPlace emoji="🍕" color="#FFD600" name="Lugar A" hearts={3 - lost} shake={done ? undefined : lost} dim={done} reduce={reduce} />
+          <AnimatePresence>
+            {!reduce && lost > 0 && (
+              <motion.span
+                key={lost}
+                className="pointer-events-none absolute -top-4 left-1/2 -ml-4 text-3xl leading-none"
+                initial={{ scale: 0.4, y: 0, opacity: 1 }}
+                animate={{ scale: [0.4, 1.5, 1.1], y: [0, -12, 24], opacity: [1, 1, 0] }}
+                transition={{ duration: 0.9, times: [0, 0.35, 1] }}
+              >
+                💔
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+        <span className="font-display text-xl font-black uppercase text-lime">vs</span>
+        <DuelPlace emoji="🎳" color="#00E5FF" name="Lugar B" hearts={3} win={done} reduce={reduce} />
+      </div>
+      <motion.div
+        initial={reduce ? false : { opacity: 0, scale: 0.7, rotate: -6 }}
+        animate={done ? { opacity: 1, scale: 1, rotate: -2 } : { opacity: 0, scale: 0.7, rotate: -6 }}
+        transition={POP}
+      >
+        <Pill className="bg-social px-3 py-1 text-[11px] text-black">🏆 Gana B · se revela el cupón</Pill>
+      </motion.div>
+    </div>
+  );
+}
+
+function DuelPlace({
+  emoji,
+  color,
+  name,
+  hearts,
+  shake,
+  win,
+  dim,
+  reduce,
+}: {
+  emoji: string;
+  color: string;
+  name: string;
+  hearts: number;
+  /** Cambia con cada corazón perdido: dispara el sacudón. */
+  shake?: number;
+  win?: boolean;
+  dim?: boolean;
+  reduce: boolean;
+}) {
+  return (
+    <motion.div
+      key={shake}
+      animate={
+        reduce
+          ? { scale: win ? 1.08 : 1 }
+          : shake
+            ? { x: [0, -8, 8, -6, 6, 0], scale: 1 }
+            : { scale: win ? 1.08 : 1, rotate: win ? -3 : 0 }
+      }
+      transition={shake ? { duration: 0.45 } : POP}
+      className={`flex w-[118px] flex-col items-center gap-2 rounded-3xl border-4 border-black p-3 text-black shadow-brutal ${
+        win ? 'bg-lime' : 'bg-cream'
+      } ${dim ? 'opacity-50' : ''}`}
+    >
+      <span
+        className="grid h-14 w-14 place-items-center rounded-2xl border-[3px] border-black text-3xl leading-none"
+        style={{ backgroundColor: color }}
+      >
+        {emoji}
+      </span>
+      <span className="text-center text-[11px] font-black uppercase leading-tight">{name}</span>
+      <span className="flex gap-0.5 text-base leading-none">
+        {[0, 1, 2].map((i) => (
+          <span key={i} className={i < hearts ? '' : 'opacity-30 grayscale'}>
+            {i < hearts ? '❤️' : '🖤'}
+          </span>
+        ))}
+      </span>
+    </motion.div>
   );
 }

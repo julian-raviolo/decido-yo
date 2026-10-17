@@ -11,8 +11,11 @@ export function PlayersBar({
   now,
   acting,
   onSelect,
+  sides,
 }: {
   players: Player[];
+  /** ⚔️ SALIDUELO: bando de cada jugador (A/B). */
+  sides?: Record<string, 'A' | 'B'>;
   now: number;
   /** Jugadores que tienen que responder ahora (defenderse, cumplir, girar la ruleta…). */
   acting: Set<string>;
@@ -66,8 +69,16 @@ export function PlayersBar({
                 </span>
               )}
             </div>
-            <span className="w-full truncate text-center text-[11px] font-black uppercase text-white">
-              {p.isMe ? 'Vos' : p.name}
+            <span className="flex w-full items-center justify-center gap-1 text-[11px] font-black uppercase text-white">
+              {sides?.[p.id] && (
+                <span
+                  className="shrink-0 rounded-full border-2 border-black bg-lime px-1 text-[9px] leading-[12px] text-black"
+                  title={`Bando ${sides[p.id]}`}
+                >
+                  {sides[p.id]}
+                </span>
+              )}
+              <span className="truncate">{p.isMe ? 'Vos' : p.name}</span>
             </span>
             <div className="flex flex-wrap justify-center gap-[3px]" aria-label="Cartas restantes">
               {p.actions.map((c) => (

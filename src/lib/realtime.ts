@@ -1,5 +1,7 @@
+import { SALIDUELO_HEARTS, hasVenue } from '@/data/venues-catalog';
 import type {
   ActiveEffect,
+  DuelSide,
   HandCard,
   Incoming,
   LogEntry,
@@ -7,7 +9,9 @@ import type {
   PlayStatus,
   Room,
   RouletteRequest,
+  RpsChoice,
   RpsMatch,
+  Saliduelo,
   TablePlay,
 } from '@/types/game';
 
@@ -37,7 +41,72 @@ export type RoomAction =
   | { type: 'REMOVE_ROULETTE'; id: string }
   | { type: 'ADD_EFFECT'; effect: ActiveEffect }
   | { type: 'ADD_RULE'; rule: Room['rules'][number] }
-  | { type: 'SET_BOT_AUTO'; value: boolean };
+  | { type: 'SET_BOT_AUTO'; value: boolean }
+  /* Piedra, Papel o Tijera sincronizado */
+  | { type: 'RPS_CHOOSE'; rpsId: string; playerId: string; choice: RpsChoice; at: number }
+  | { type: 'RPS_NEXT_ROUND'; rpsId: string; round: number; at: number }
+  /* ⚔️ SALIDUELO */
+  | { type: 'SALIDUELO_PICK'; playerId: string; venueId: string }
+  | { type: 'SALIDUELO_START' }
+  | { type: 'SALIDUELO_DAMAGE'; playId: string; playerId: string; at: number };
+
+const RPS_CHOICES: RpsChoice[] = ['ROCK', 'PAPER', 'SCISSORS'];
+const other = (s: DuelSide): DuelSide => (s === 'A' ? 'B' : 'A');
+
+/**
+ * Elección de lugar. Reglas de bandos:
+ * - el primer local elegido es el Lugar A; el primer local distinto, el Lugar B;
+ * - elegir un local que ya es A o B te suma a ese bando;
+ * - en salas de 2 (incluida HOT) cada uno defiende su propio lugar;
+ * - durante la batalla sólo se puede sumar a A o B (para quien llega tarde).
+ */
+function pickVenue(room: Room, s: Saliduelo, playerId: string, venueId: string): Saliduelo | null {
+  if (s.phase === 'won' || !hasVenue(venueId) || !room.players.some((p) => p.id === playerId)) return null;
+  const sides = { ...s.sides };
+  const picks = { ...s.picks };
+  const members = (side: DuelSide) => Object.keys(picks).filter((id) => picks[id] === side);
+  const cur = picks[playerId];
+  const duo = room.players.length <= 2;
+
+  // Re-elección en la fase de elección: si estás solo en tu bando, cambiás el local de tu bando.
+  if (s.phase === 'pick' && cur && sides[cur] && sides[cur]!.venueId !== venueId) {
+    const alone = members(cur).every((id) => id === playerId);
+    if (alone && sides[other(cur)]?.venueId !== venueId) {
+      sides[cur] = { venueId, hearts: SALIDUELO_HEARTS };
+      return { ...s, sides };
+    }
+  }
+
+  let side: DuelSide | null = null;
+  if (sides.A?.venueId === venueId) side = 'A';
+  else if (sides.B?.venueId === venueId) side = 'B';
+  else if (s.phase === 'pick' && !sides.A) side = 'A';
+  else if (s.phase === 'pick' && !sides.B) side = 'B';
+  if (!side) return null;
+  if (side === cur) return null;
+  // De a dos, cada uno defiende su lugar: no te podés sumar al bando del otro.
+  if (duo && members(side).some((id) => id !== playerId)) return null;
+  if (!sides[side]) sides[side] = { venueId, hearts: SALIDUELO_HEARTS };
+  picks[playerId] = side;
+
+  // Un bando que quedó vacío durante la elección se libera.
+  if (s.phase === 'pick') {
+    for (const x of ['A', 'B'] as const) {
+      if (sides[x] && !Object.values(picks).includes(x)) delete sides[x];
+    }
+    // Si sólo quedó B, pasa a ser A.
+    if (!sides.A && sides.B) {
+      sides.A = sides.B;
+      delete sides.B;
+      for (const id of Object.keys(picks)) picks[id] = 'A';
+    }
+  }
+
+  const next: Saliduelo = { ...s, sides, picks };
+  // Todos eligieron y hay dos lugares: arranca la batalla sola.
+  if (next.phase === 'pick' && sides.A && sides.B && room.players.every((p) => picks[p.id])) next.phase = 'battle';
+  return next;
+}
 
 const mapPlayer = (room: Room, id: string, fn: (p: Player) => Player): Room => ({
   ...room,
@@ -58,9 +127,17 @@ export function roomReducer(room: Room | null, action: RoomAction): Room | null 
     case 'ADD_PLAYER':
       if (room.players.some((p) => p.id === action.player.id)) return room;
       return { ...room, players: [...room.players, { ...action.player, isMe: false }] };
-    case 'REMOVE_PLAYER':
+    case 'REMOVE_PLAYER': {
+      const sd = room.saliduelo;
+      let saliduelo = sd;
+      if (sd && sd.picks[action.playerId]) {
+        const picks = { ...sd.picks };
+        delete picks[action.playerId];
+        saliduelo = { ...sd, picks };
+      }
       return {
         ...room,
+        ...(saliduelo ? { saliduelo } : {}),
         players: room.players.filter((p) => p.id !== action.playerId),
         incoming: room.incoming.filter((i) => i.targetId !== action.playerId),
         roulettes: room.roulettes.filter((r) => r.playerId !== action.playerId),
@@ -69,6 +146,7 @@ export function roomReducer(room: Room | null, action: RoomAction): Room | null 
             ? null
             : room.rps,
       };
+    }
     case 'LOG':
       return { ...room, log: [action.entry, ...room.log].slice(0, 80) };
     case 'ADD_PLAY':
@@ -125,6 +203,52 @@ export function roomReducer(room: Room | null, action: RoomAction): Room | null 
       return { ...room, rules: [...room.rules, action.rule] };
     case 'SET_BOT_AUTO':
       return { ...room, botAuto: action.value };
+
+    case 'RPS_CHOOSE': {
+      const rps = room.rps;
+      if (!rps || rps.id !== action.rpsId || !RPS_CHOICES.includes(action.choice)) return room;
+      if (action.playerId !== rps.attackerId && action.playerId !== rps.defenderId) return room;
+      // Idempotente: la primera jugada de la ronda es la que vale.
+      if (rps.choices?.[action.playerId]) return room;
+      const choices = { ...(rps.choices ?? {}), [action.playerId]: action.choice };
+      const both = !!choices[rps.attackerId] && !!choices[rps.defenderId];
+      return { ...room, rps: { ...rps, choices, ...(both ? { revealAt: action.at } : {}) } };
+    }
+    case 'RPS_NEXT_ROUND': {
+      const rps = room.rps;
+      if (!rps || rps.id !== action.rpsId || (rps.round ?? 0) !== action.round) return room;
+      return { ...room, rps: { ...rps, choices: {}, round: action.round + 1, roundAt: action.at, revealAt: undefined } };
+    }
+
+    case 'SALIDUELO_PICK': {
+      if (!room.saliduelo) return room;
+      const next = pickVenue(room, room.saliduelo, action.playerId, action.venueId);
+      return next ? { ...room, saliduelo: next } : room;
+    }
+    case 'SALIDUELO_START': {
+      const sd = room.saliduelo;
+      if (!sd || sd.phase !== 'pick' || !sd.sides.A || !sd.sides.B) return room;
+      return { ...room, saliduelo: { ...sd, phase: 'battle' } };
+    }
+    case 'SALIDUELO_DAMAGE': {
+      const sd = room.saliduelo;
+      const side = sd?.picks[action.playerId];
+      if (!sd || sd.phase !== 'battle' || !side || sd.hits.includes(action.playId)) return room;
+      const hit = sd.sides[side];
+      if (!hit) return room;
+      const hearts = Math.max(0, hit.hearts - 1);
+      const won = hearts === 0;
+      return {
+        ...room,
+        saliduelo: {
+          ...sd,
+          sides: { ...sd.sides, [side]: { ...hit, hearts } },
+          hits: [...sd.hits, action.playId].slice(-60),
+          lastHit: { id: action.playId, side, at: action.at },
+          ...(won ? { phase: 'won' as const, winner: other(side) } : {}),
+        },
+      };
+    }
     default:
       return room;
   }

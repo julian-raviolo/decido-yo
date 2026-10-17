@@ -164,6 +164,8 @@ export interface Incoming {
   durationFactor?: number;
 }
 
+export type RpsChoice = 'ROCK' | 'PAPER' | 'SCISSORS';
+
 export interface RpsMatch {
   id: string;
   playId: string;
@@ -172,6 +174,36 @@ export interface RpsMatch {
   defenderId: string;
   /** Carta de defensa usada (define la penalidad si pierde quien se defiende). */
   defenseCardId?: string;
+  /** Jugadas elegidas en la ronda actual (la UI no revela la del rival hasta que estén las dos). */
+  choices?: Record<string, RpsChoice>;
+  /** Ronda actual (sube con cada empate). */
+  round?: number;
+  /** Inicio de la ronda: a los 60 s se elige al azar por el ausente. */
+  roundAt?: number;
+  /** Momento en que se completaron las dos jugadas. */
+  revealAt?: number;
+}
+
+/* ---------- SALIDUELO: batalla de lugares ---------- */
+
+export type DuelSide = 'A' | 'B';
+
+export interface DuelVenue {
+  venueId: string;
+  hearts: number;
+}
+
+/** Variante de sala (Clásico o HOT): dos lugares con 3 ❤️; el que queda en pie gana y revela su cupón. */
+export interface Saliduelo {
+  phase: 'pick' | 'battle' | 'won';
+  sides: { A?: DuelVenue; B?: DuelVenue };
+  /** Bando de cada jugador. */
+  picks: Record<string, DuelSide>;
+  winner?: DuelSide;
+  /** Jugadas que ya restaron un corazón (evita el doble descuento). */
+  hits: string[];
+  /** Último corazón perdido: dispara la animación en todos los celulares. */
+  lastHit?: { id: string; side: DuelSide; at: number };
 }
 
 export interface RouletteRequest {
@@ -217,6 +249,8 @@ export interface Room {
   effects: ActiveEffect[];
   rules: { id: string; text: string; byId: string }[];
   log: LogEntry[];
+  /** Variante ⚔️ SALIDUELO (opcional: salas sin duelo no la tienen). */
+  saliduelo?: Saliduelo;
 }
 
 export interface Profile {

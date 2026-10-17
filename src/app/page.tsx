@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bot,
   CalendarClock,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   Crown,
   Flame,
   Layers,
@@ -26,7 +25,7 @@ import {
 import { GameCard } from '@/components/GameCard';
 import { HowToPlay, tutorialSeen } from '@/components/HowToPlay';
 import { NameSheet } from '@/components/NameSheet';
-import { BrutalButton, Sheet } from '@/components/ui';
+import { Avatar, BrutalButton, Sheet } from '@/components/ui';
 import {
   MAX_PLAYERS,
   PRESENCIAL_SCENARIOS,
@@ -54,6 +53,7 @@ export default function HomePage() {
   const [hotAsk, setHotAsk] = useState(false);
   const [nameOpen, setNameOpen] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   // Acción que el usuario quiso hacer sin nombre: se retoma apenas lo pone.
   const [pending, setPending] = useState<Kind | null>(null);
   const booted = useRef(false);
@@ -73,6 +73,7 @@ export default function HomePage() {
   const maxBots = MAX_PLAYERS[mode] - 1;
   const botCount = Math.min(bots, maxBots);
   const nameOk = profile.name.trim().length >= 2;
+  const duel = settings.saliduelo;
 
   // Primera visita (recién después de hidratar): primero el nombre, después el tutorial.
   useEffect(() => {
@@ -133,10 +134,30 @@ export default function HomePage() {
   return (
     <div className="flex flex-1 flex-col gap-4 pb-6">
       {/* Hero: las cartas quedan a la altura del bloque DECIDO YO */}
-      <header className={hot ? 'pt-6' : 'pt-3'}>
-        {!hot && (
-          <p className="mb-1 text-[11px] font-black uppercase tracking-[0.25em] text-lime">Party card game</p>
-        )}
+      <header>
+        {/* Fila superior: etiqueta + perfil (una vez puesto el nombre, sólo queda este ícono discreto) */}
+        <div className={`flex h-11 items-center justify-between ${hot ? 'mb-1' : ''}`}>
+          {!hot ? (
+            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-lime">Party card game</p>
+          ) : (
+            <span />
+          )}
+          {hydrated && nameOk && (
+            <button
+              onClick={() => setNameOpen(true)}
+              aria-label={`Tu nombre: ${profile.name.trim()}. Tocá para cambiarlo`}
+              title={profile.name.trim()}
+              className="-mr-2 grid h-11 w-11 place-items-center transition-transform active:translate-x-0.5 active:translate-y-0.5"
+            >
+              <span className="relative">
+                <Avatar name={profile.name} color={profile.color} size={28} />
+                <span className="absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full border-2 border-black bg-cream text-black">
+                  <Pencil size={8} strokeWidth={4} />
+                </span>
+              </span>
+            </button>
+          )}
+        </div>
         <div className="relative">
           <div className="pointer-events-none absolute -right-1 top-1/2 flex -translate-y-[60%]" aria-hidden>
             <motion.div key={`a-${mode}`} initial={{ rotate: 0, y: 16 }} animate={{ rotate: 12, y: 0 }} transition={SPRING} className="origin-bottom">
@@ -195,31 +216,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Nombre (abre el popup) + tutorial */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setNameOpen(true)}
-          disabled={!hydrated}
-          aria-label={nameOk ? `Tu nombre: ${profile.name}. Tocá para cambiarlo` : 'Poné tu nombre'}
-          className={`flex h-[44px] min-w-0 flex-1 items-center gap-2 rounded-2xl border-[3px] border-black px-3 font-display text-sm font-black uppercase text-black shadow-brutal-sm transition-transform active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60 ${
-            !hydrated || nameOk ? 'bg-cream' : 'bg-social'
-          }`}
-        >
-          <span className="text-base leading-none">👋</span>
-          <span className="min-w-0 flex-1 truncate text-left">
-            {!hydrated ? '…' : nameOk ? profile.name.trim() : 'Tu nombre'}
-          </span>
-          <Pencil size={16} strokeWidth={3} className="shrink-0" />
-        </button>
-        <button
-          onClick={() => setHowOpen(true)}
-          className="flex h-[44px] shrink-0 items-center gap-1.5 rounded-2xl border-[3px] border-black bg-panel px-3 text-[11px] font-black uppercase text-cream shadow-brutal-sm transition-transform active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
-        >
-          <CircleHelp size={16} strokeWidth={3} /> ¿Cómo se juega?
-        </button>
-      </div>
-
-      {/* Configuración de la sala: 3 filas segmentadas */}
+      {/* Configuración de la sala: 4 filas segmentadas */}
       <section className="flex flex-col gap-2 rounded-3xl border-4 border-black bg-panel/90 p-3 shadow-brutal-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-[11px] font-black uppercase tracking-widest text-white/70">Configurá la sala</h2>
@@ -274,6 +271,20 @@ export default function HomePage() {
             ))}
           </ConfigRow>
         )}
+        <ConfigRow label="Variante" aria="Variante de sala" cols="grid-cols-2">
+          <SegButton active={!duel} disabled={!!room} onClick={() => game.setSaliduelo(false)}>
+            <span className="text-sm leading-none">🃏</span> Normal
+          </SegButton>
+          <SegButton
+            active={duel}
+            disabled={!!room}
+            onClick={() => game.setSaliduelo(true)}
+            activeClass="bg-lime text-black"
+            title="Batalla de lugares: 3 ❤️ por bando y cupón para el ganador"
+          >
+            <span className="text-sm leading-none">⚔️</span> Saliduelo
+          </SegButton>
+        </ConfigRow>
       </section>
 
       {room && (
@@ -289,9 +300,13 @@ export default function HomePage() {
             <Users size={22} strokeWidth={3} /> {hot ? 'Jugar en pareja' : 'Jugar con amigos'}
           </div>
           <p className="mt-1.5 text-xs font-semibold [text-wrap:pretty]">
-            {hot
-              ? 'Sala para 2: creala y pasale el código a tu pareja.'
-              : 'Hasta 12, cada uno desde su celu y con su propio mazo.'}
+            {duel
+              ? hot
+                ? 'Cada uno defiende su lugar con 3 ❤️: el que queda en pie elige la salida.'
+                : 'Cada bando defiende un lugar con 3 ❤️: el que queda en pie elige la salida.'
+              : hot
+                ? 'Sala para 2: creala y pasale el código a tu pareja.'
+                : 'Hasta 12, cada uno desde su celu y con su propio mazo.'}
           </p>
         </div>
         <BrutalButton
@@ -301,7 +316,7 @@ export default function HomePage() {
           className="flex items-center justify-center gap-2"
         >
           {busy === 'create' ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} strokeWidth={3} />}
-          Crear sala {hot && 'HOT'}
+          {duel ? '⚔️ Crear Saliduelo' : 'Crear sala'} {hot && 'HOT'}
         </BrutalButton>
         <div className="flex gap-3">
           <input
@@ -388,44 +403,63 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Reglas rápidas: lo que no entra en el tutorial, plegado */}
-      <details className="group rounded-3xl border-4 border-black bg-panel p-3 shadow-brutal-sm">
-        <summary className="flex h-[44px] cursor-pointer list-none items-center justify-between font-display text-sm font-black uppercase text-cream [&::-webkit-details-marker]:hidden">
-          Reglas rápidas
-          <ChevronDown size={18} strokeWidth={3} className="transition-transform group-open:rotate-180" />
-        </summary>
-        <ul className="mt-1 flex list-disc flex-col gap-1 pl-4 text-sm font-semibold text-white/85">
-          <li>
-            Tenés <b>10 usos por semana</b> por modo. Cada carta quemada no vuelve hasta el lunes.
-          </li>
-          <li>
-            <b>2 re-barajados gratis</b> por semana; después, $0.50. ¿Sin cartas? Recargá la mano ($0.50 o $0.83).
-          </li>
-          <li>
-            Mesa de <b>2 a 6</b>: te tocan <b>2 Acción + 1 Escudo</b>.
-          </li>
-          {!hot && (
-            <li>
-              Mesa de <b>7 a 12</b>: <b>3 Acción + 2 Escudos</b>.
-            </li>
+      {/* Tutorial y reglas: abajo de todo, discretos */}
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setHowOpen(true)}
+            className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-2xl border-[3px] border-black bg-panel px-3 text-[11px] font-black uppercase text-cream shadow-brutal-sm transition-transform active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+          >
+            <span className="text-sm leading-none">📖</span> ¿Cómo se juega?
+          </button>
+          <button
+            onClick={() => setRulesOpen((o) => !o)}
+            aria-expanded={rulesOpen}
+            aria-controls="reglas-rapidas"
+            className="flex h-11 items-center gap-1 rounded-2xl border-[3px] border-black bg-panel px-3 text-[11px] font-black uppercase text-cream shadow-brutal-sm transition-transform active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+          >
+            Reglas rápidas
+            <ChevronDown size={16} strokeWidth={3} className={`transition-transform ${rulesOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+        <AnimatePresence initial={false}>
+          {rulesOpen && (
+            <motion.ul
+              id="reglas-rapidas"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={SPRING}
+              className="flex list-disc flex-col gap-1 rounded-3xl border-4 border-black bg-panel p-3 pl-7 text-sm font-semibold text-white/85 shadow-brutal-sm"
+            >
+              <li>
+                Te toca una mano al azar: <b>2 Acción + 1 Escudo</b>
+                {hot ? '.' : <> (mesa de 7 a 12: <b>3 + 2</b>).</>}
+              </li>
+              <li>
+                Deslizá una carta para arriba y tirala. Cada carta quemada gasta <b>1 de tus 10 usos</b> de la
+                semana y vuelve el lunes.
+              </li>
+              <li>
+                Te atacan: <b>60 s</b> para defenderte o cumplir. ¿No cumplís? <b>Ruleta</b> de castigo.
+              </li>
+              <li>
+                <b>⚔️ Saliduelo</b>: cada bando defiende un lugar con <b>3 ❤️</b>. El que no cumple le saca un
+                corazón a su lugar; el que queda en pie gana y revela su cupón.
+              </li>
+              {hot && (
+                <li>
+                  Modo HOT: todo es soft y <b>con consentimiento</b>. Un “no” siempre se respeta.
+                </li>
+              )}
+            </motion.ul>
           )}
-          <li>
-            {activeCardsFor(mode).length} cartas activas + {pro.length} <b>PRO</b>: destrabalas con el pack ($2.00) o
-            cumpliendo un reto.
-          </li>
-          <li>
-            Te atacan: <b>60 s</b> para defenderte. ¿No cumplís? <b>Ruleta</b>, sí o sí.
-          </li>
-          {hot && (
-            <li>
-              Modo HOT: todo es soft y <b>con consentimiento</b>. Un “no” siempre se respeta.
-            </li>
-          )}
-        </ul>
-      </details>
+        </AnimatePresence>
+      </div>
 
       <NameSheet
         open={nameOpen}
+        firstTime={hydrated && !nameOk}
         initial={profile.name}
         color={profile.color}
         hot={hot}

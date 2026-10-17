@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GameCard } from '@/components/GameCard';
 import { cardMeta, getCard, hasCard } from '@/data/cards-catalog';
@@ -20,7 +21,8 @@ const STATUS_LABEL: Record<PlayStatus, { text: string; bg: string }> = {
   evidence: { text: 'Votando', bg: '#FFD600' },
 };
 
-export function TableZone({ room }: { room: Room }) {
+/** `duel`: tablero de ⚔️ SALIDUELO, en el centro de la mesa arriba del paño. */
+export function TableZone({ room, duel }: { room: Room; duel?: ReactNode }) {
   const name = (id: string | null) => {
     const p = room.players.find((x) => x.id === id);
     return p ? (p.isMe ? 'Vos' : p.name) : 'Mesa';
@@ -28,9 +30,10 @@ export function TableZone({ room }: { room: Room }) {
   const recent = room.table.slice(-6);
 
   return (
-    <section className="flex min-h-[160px] flex-1 flex-col">
+    <section className="flex min-h-[160px] flex-1 flex-col gap-3">
+      {duel}
       <div
-        className="relative min-h-0 flex-1 overflow-hidden rounded-[2rem] border-4 border-black bg-felt shadow-brutal"
+        className={`relative flex-1 overflow-hidden rounded-[2rem] border-4 border-black bg-felt shadow-brutal ${duel ? 'min-h-[200px]' : 'min-h-0'}`}
         style={{
           backgroundImage:
             'radial-gradient(circle at 50% 45%, rgb(var(--c-felt-hi)) 0%, rgb(var(--c-felt)) 65%), repeating-radial-gradient(circle at 50% 45%, transparent 0 22px, rgba(255,255,255,0.04) 22px 24px)',
