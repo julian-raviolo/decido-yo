@@ -38,6 +38,8 @@ Todos en el mismo wifi abren `http://<IP>:3000`. Uno toca **Crear sala** y compa
 | **Recargar mano** al quedarse sin cartas o sin usos: $0.50 (mano de 3) / $0.83 (mano de 5); suma esos usos | `rechargeHand()` |
 | **Expansión PRO** $2.00 o prueba gratis con reto (hasta el lunes) | `CardPreviewModal` |
 | **Modo Online**: al cumplir, la víctima sube prueba (foto o texto, 120 s) y la sala vota 👍/👎; si pierde → Ruleta | `Evidence.tsx`, `evidenceTick` |
+| **⚔️ SALIDUELO**: cada bando defiende un lugar con 2 ❤️; mano fija 3 Acción + 2 Escudos; el que no cumple pierde un corazón; el ganador revela su cupón | `venues-catalog.ts`, `Saliduelo.tsx` |
+| **Piedra, Papel o Tijera** real: cada uno elige en su celu, empate = de nuevo | `RpsModal.tsx`, `chooseRps()` |
 | HOT: exclusivo parejas; en Online la prueba es sólo texto (las fotos no pasan por la app) | — |
 
 Todos los pagos son **simulados** (no se cobra nada): están listos para conectar un checkout real.
