@@ -79,7 +79,9 @@ export interface Economy {
   weekKey: string;
   weeklyReshufflesRemaining: number;
   /** Pagos simulados (para métricas / historial de compras). */
-  purchases: { kind: 'reshuffle' | 'recharge' | 'pack'; usd: number; at: number; mode: GameMode }[];
+  purchases: { kind: 'reshuffle' | 'recharge' | 'pack' | 'refill' | 'pro'; usd: number; at: number; mode: GameMode }[];
+  /** Plan PRO (simulado): 2 refills de energía gratis por semana + 1 pack de expansión a elección. */
+  pro?: { since: number; refillsLeft: number; pack: GameMode };
 }
 
 /* ---------- Sala / Juntada ---------- */

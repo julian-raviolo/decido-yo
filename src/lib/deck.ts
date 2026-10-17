@@ -1,6 +1,7 @@
 import {
   WEEKLY_BURNS,
   WEEKLY_FREE_RESHUFFLES,
+  PRO_WEEKLY_REFILLS,
   activeCardsFor,
   fitsScenario,
   catalogFor,
@@ -128,7 +129,13 @@ export const ensureEconomy = (e: Economy | null | undefined, date = new Date()):
   if (!e || typeof e.weeklyReshufflesRemaining !== 'number') {
     return { weekKey, weeklyReshufflesRemaining: WEEKLY_FREE_RESHUFFLES, purchases: [] };
   }
-  if (e.weekKey !== weekKey) return { ...e, weekKey, weeklyReshufflesRemaining: WEEKLY_FREE_RESHUFFLES };
+  if (e.weekKey !== weekKey)
+    return {
+      ...e,
+      weekKey,
+      weeklyReshufflesRemaining: WEEKLY_FREE_RESHUFFLES,
+      ...(e.pro ? { pro: { ...e.pro, refillsLeft: PRO_WEEKLY_REFILLS } } : {}),
+    };
   return e;
 };
 

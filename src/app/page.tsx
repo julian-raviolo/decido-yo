@@ -280,7 +280,7 @@ export default function HomePage() {
             disabled={!!room}
             onClick={() => game.setSaliduelo(true)}
             activeClass="bg-lime text-black"
-            title="Batalla de lugares: 3 ❤️ por bando y cupón para el ganador"
+            title="Batalla de lugares: 2 ❤️ por bando y cupón para el ganador"
           >
             <span className="text-sm leading-none">⚔️</span> Saliduelo
           </SegButton>
@@ -302,8 +302,8 @@ export default function HomePage() {
           <p className="mt-1.5 text-xs font-semibold [text-wrap:pretty]">
             {duel
               ? hot
-                ? 'Cada uno defiende su lugar con 3 ❤️: el que queda en pie elige la salida.'
-                : 'Cada bando defiende un lugar con 3 ❤️: el que queda en pie elige la salida.'
+                ? 'Cada uno defiende su lugar con 2 ❤️: el que queda en pie elige la salida.'
+                : 'Cada bando defiende un lugar con 2 ❤️: el que queda en pie elige la salida.'
               : hot
                 ? 'Sala para 2: creala y pasale el código a tu pareja.'
                 : 'Hasta 12, cada uno desde su celu y con su propio mazo.'}
@@ -356,7 +356,7 @@ export default function HomePage() {
           <ChevronRight size={16} strokeWidth={3} className="text-white/60" />
         </div>
         <div className="mt-2 flex items-center gap-2">
-          <Flame size={14} strokeWidth={3} className="shrink-0" style={{ color: hot ? '#FF4D6D' : '#FFD600' }} />
+          <Zap size={14} strokeWidth={3} className="shrink-0" style={{ color: hot ? '#FF4D6D' : '#FFD600' }} />
           <div className="grid flex-1 grid-cols-10 gap-1">
             {Array.from({ length: WEEKLY_BURNS }, (_, i) => (
               <span
@@ -437,14 +437,14 @@ export default function HomePage() {
                 {hot ? '.' : <> (mesa de 7 a 12: <b>3 + 2</b>).</>}
               </li>
               <li>
-                Deslizá una carta para arriba y tirala. Cada carta quemada gasta <b>1 de tus 10 usos</b> de la
+                Deslizá una carta para arriba y tirala. Cada carta quemada gasta <b>1 de tus {WEEKLY_BURNS} energías</b> de la
                 semana y vuelve el lunes.
               </li>
               <li>
                 Te atacan: <b>60 s</b> para defenderte o cumplir. ¿No cumplís? <b>Ruleta</b> de castigo.
               </li>
               <li>
-                <b>⚔️ Saliduelo</b>: cada bando defiende un lugar con <b>3 ❤️</b>. El que no cumple le saca un
+                <b>⚔️ Saliduelo</b>: cada bando defiende un lugar con <b>2 ❤️</b>. El que no cumple le saca un
                 corazón a su lugar; el que queda en pie gana y revela su cupón.
               </li>
               {hot && (

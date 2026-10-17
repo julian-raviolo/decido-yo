@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-mo
 import { ChevronsUp, Lock } from 'lucide-react';
 import { CardBack, GameCard } from '@/components/GameCard';
 import { BrutalButton } from '@/components/ui';
-import { GAG_MINUTES } from '@/data/cards-catalog';
+import { GAG_MINUTES, WEEKLY_BURNS } from '@/data/cards-catalog';
 import type { HandCard, Player } from '@/types/game';
 
 export type Slot = 'action' | 'defense';
@@ -70,7 +70,7 @@ export function HandDock({
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block font-display text-sm font-black uppercase">¡Te quedaste sin cartas!</span>
             <span className="block text-[10px] font-semibold opacity-85">
-              {noBudget ? 'Gastaste tus 10 usos de la semana.' : 'Quemaste toda tu mano.'}
+              {noBudget ? 'Gastaste tus energías de la semana.' : 'Quemaste toda tu mano.'}
             </span>
           </span>
           <button
@@ -150,7 +150,7 @@ export function HandDock({
                       cardId={card.cardId}
                       size={size}
                       state={usable ? (locked ? 'locked' : 'ready') : 'burned'}
-                      lockLabel={gag ? 'Amordazada' : 'Sin usos esta semana'}
+                      lockLabel={gag ? 'Amordazada' : 'Sin energías'}
                     />
                     {isPreview && (
                       <motion.span
@@ -287,7 +287,7 @@ export function CardFocus({
                 <b className="text-defense">Uso activo (Mordaza):</b> bloqueá la Acción de alguien por {GAG_MINUTES} min.
               </p>
             ) : (
-              <p>Al usarla gastás 1 de tus 10 usos semanales y no vuelve a salir hasta el lunes.</p>
+              <p>Al usarla gastás 1 de tus {WEEKLY_BURNS} energías semanales y no vuelve a salir hasta el lunes.</p>
             )}
             <div className="mt-4 flex gap-3">
               <BrutalButton variant="cream" className="flex-1 py-2.5 text-sm" onClick={onClose}>

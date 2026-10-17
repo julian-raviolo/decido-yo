@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bot, Copy, Flame, Home, Hourglass, ScrollText, LogOut, Share2, Shield, Users, WifiOff, Zap } from 'lucide-react';
 import { PRICES, SCENARIO_META, WEEKLY_BURNS, formatUSD, getCard, handSizeFor, rechargePrice } from '@/data/cards-catalog';
+import { EnergyModal } from '@/components/EnergyModal';
 import { PayModal } from '@/components/PayModal';
 import { EvidenceModal, EvidencePanel } from '@/components/room/Evidence';
 import { isGagged, isImmune, useGame, useNow } from '@/context/GameContext';
@@ -35,6 +36,7 @@ export default function SalaPage() {
   const [copied, setCopied] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [pay, setPay] = useState<'reshuffle' | 'recharge' | null>(null);
+  const [energyOpen, setEnergyOpen] = useState(false);
   const [seenLog, setSeenLog] = useState(0);
   const [venueOpen, setVenueOpen] = useState(false);
   const [victoryOpen, setVictoryOpen] = useState(false);
@@ -53,16 +55,20 @@ export default function SalaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingId]);
 
+  const outOfEnergy = hydrated && !!room && game.deck.weeklyBurnsRemaining <= 0;
+  const energyShown = useRef<string | null>(null);
+  const energyPending = energyOpen || (outOfEnergy && energyShown.current !== room?.code);
+
   // ⚔️ SALIDUELO: al entrar sin lugar elegido se abre el selector (una vez).
   const sd = room?.saliduelo;
   const needsPick = !!sd && !!me && sd.phase !== 'won' && !sd.picks[me.id];
   const busyOverlay = !!(room?.incoming.some((i) => i.targetId === me?.id) || room?.rps);
   const autoPicked = useRef(false);
   useEffect(() => {
-    if (!needsPick || busyOverlay || autoPicked.current) return;
+    if (!needsPick || busyOverlay || energyPending || autoPicked.current) return;
     autoPicked.current = true;
     setVenueOpen(true);
-  }, [needsPick, busyOverlay]);
+  }, [needsPick, busyOverlay, energyPending]);
 
   // Victoria: se abre sola una vez por sala en cada celular (después, tocando el duelo).
   const wonKey = sd?.phase === 'won' && room ? `decido-yo:saliduelo-won:${room.code}:${sd.winner}` : null;
@@ -77,6 +83,13 @@ export default function SalaPage() {
     setVenueOpen(false);
     setVictoryOpen(true);
   }, [wonKey]);
+
+  // Sin energías: el cartel de refill / Plan PRO aparece solo una vez por sala.
+  useEffect(() => {
+    if (!outOfEnergy || !room || venueOpen || energyShown.current === room.code) return;
+    energyShown.current = room.code;
+    setEnergyOpen(true);
+  }, [outOfEnergy, room, venueOpen]);
 
   if (!hydrated || !room || !me) {
     return <div className="grid flex-1 place-items-center font-display font-black uppercase text-white/50">Cargando mesa…</div>;
@@ -108,9 +121,10 @@ export default function SalaPage() {
   ]);
   const blockingOverlay = !!(rps || incoming || roulette);
   const n = room.players.length;
-  const hand = handSizeFor(n);
+  const hand = handSizeFor(n, !!room.saliduelo);
   const budget = game.deck.weeklyBurnsRemaining;
   const noBudget = budget <= 0;
+
   const handCards = hand.actions + hand.defenses;
   const rechargeCost = rechargePrice(handCards);
   const myEvidence = room.table.find((t) => t.status === 'evidence' && t.toId === me.id && !t.evidence) ?? null;
@@ -262,8 +276,8 @@ export default function SalaPage() {
         <Pill className="bg-panel text-white" title={SCENARIO_META[room.scenario].label}>
           {SCENARIO_META[room.scenario].emoji} {SCENARIO_META[room.scenario].short}
         </Pill>
-        <Pill className={`ml-auto ${noBudget ? 'bg-special text-white' : 'bg-cream text-black'}`} title="Usos de esta semana">
-          <Flame size={11} strokeWidth={3} /> {budget}/{WEEKLY_BURNS}
+        <Pill className={`ml-auto ${noBudget ? 'bg-special text-white' : 'bg-cream text-black'}`} title="Energías de esta semana">
+          <Zap size={11} strokeWidth={3} /> {budget}/{WEEKLY_BURNS}
         </Pill>
       </div>
 
@@ -330,7 +344,7 @@ export default function SalaPage() {
             if (!game.reshuffleHand()) setPay('reshuffle');
           }}
           rechargeLabel={formatUSD(rechargeCost)}
-          onRecharge={() => setPay('recharge')}
+          onRecharge={() => (noBudget ? setEnergyOpen(true) : setPay('recharge'))}
         />
       </div>
 
@@ -340,7 +354,7 @@ export default function SalaPage() {
         locked={(focus?.slot === 'action' && gagged) || noBudget}
         lockReason={
           noBudget
-            ? `Gastaste tus ${WEEKLY_BURNS} usos de la semana. Vuelven el lunes.`
+            ? `Gastaste tus ${WEEKLY_BURNS} energías de la semana. Vuelven el lunes.`
             : 'Te amordazaron: no podés usar tu Acción todavía.'
         }
         onClose={() => setFocus(null)}
@@ -399,6 +413,8 @@ export default function SalaPage() {
         onAttack={(cardId) => botSheet && game.simulateBotAttack(botSheet.id, cardId)}
         onGag={() => botSheet && game.simulateBotGag(botSheet.id)}
       />
+
+      <EnergyModal open={energyOpen} onClose={() => setEnergyOpen(false)} />
 
       <PayModal
         open={pay === 'reshuffle'}

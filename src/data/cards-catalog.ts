@@ -442,6 +442,10 @@ export const cardScenarios = (c: CardDef): Scenario[] => {
 export const PRICES = {
   /** Expansión PRO completa (20 cartas) por modo. */
   pack: 2.0,
+  /** Refill: vuelve a llenar las energías de la semana. */
+  refill: 0.99,
+  /** Plan PRO mensual (simulado). */
+  pro: 3.99,
   /** Re-barajado extra cuando se agotan los 2 gratis de la semana. */
   reshuffle: 0.5,
   /** Precio por carta al recargar una mano entera. */
@@ -453,14 +457,18 @@ export const rechargePrice = (handCards: number) => (handCards <= 3 ? 0.5 : Math
 export const formatUSD = (n: number) => `$${n.toFixed(2)} USD`;
 
 /** Presupuesto semanal de cartas quemables, por modo. */
-export const WEEKLY_BURNS = 10;
+export const WEEKLY_BURNS = 6;
+
+/** Refills de energía gratis por semana con el Plan PRO. */
+export const PRO_WEEKLY_REFILLS = 2;
 
 /** Jugadores máximos por sala (HOT es exclusivo de parejas). */
 export const MAX_PLAYERS: Record<GameMode, number> = { classic: 12, hot: 2 };
 
 /** Escalado de la mano según la cantidad de jugadores de la sala. */
-export const handSizeFor = (players: number) =>
-  players >= 7 ? { actions: 3, defenses: 2 } : { actions: 2, defenses: 1 };
+/** En ⚔️ SALIDUELO siempre son 3 Acción + 2 Defensa. */
+export const handSizeFor = (players: number, saliduelo = false) =>
+  saliduelo || players >= 7 ? { actions: 3, defenses: 2 } : { actions: 2, defenses: 1 };
 
 /** Duraciones de reglas (minutos). */
 export const GAG_MINUTES = 20;

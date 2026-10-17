@@ -103,4 +103,4 @@ export const BUSINESS_WHATSAPP_NUMBER = '59899000000';
 export const businessWhatsappUrl = (n: string = BUSINESS_WHATSAPP_NUMBER) =>
   `https://wa.me/${n}?text=Hola!%20Quiero%20sumar%20mi%20local%20a%20SALIDUELO%20en%20Decido%20Yo`;
 
-export const SALIDUELO_HEARTS = 3;
+export const SALIDUELO_HEARTS = 2;

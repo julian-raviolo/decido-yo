@@ -32,7 +32,8 @@ Todos en el mismo wifi abren `http://<IP>:3000`. Uno toca **Crear sala** y compa
 | **100 cartas** (50 Clásico + 50 HOT, cada modo 30 activas + 20 PRO) con etiquetas de escenario | `src/data/cards-catalog.ts` |
 | Reparto filtrado por modo + escenario + desbloqueo + no quemada esta semana | `drawCard()` en `src/lib/deck.ts` |
 | Mano: **2–6 jugadores → 2 Acción + 1 Escudo** · **7–12 → 3 + 2** | `handSizeFor()` |
-| **10 usos por semana** por modo (reinicio lunes 00:00) | `weeklyBurnsRemaining` |
+| **6 energías por semana** por modo (≈2 partidas; reinicio lunes 00:00) | `WEEKLY_BURNS` |
+| **Sin energías** → cartel: refill $0.99 o **Plan PRO** $3.99/mes (2 refills por semana + pack de expansión a elección) | `EnergyModal`, `refillEnergy()`, `subscribePro()` |
 | **Re-barajar mano**: 2 gratis por semana, después $0.50 (pago simulado) | `reshuffleHand()`, `Economy` |
 | **Recargar mano** al quedarse sin cartas o sin usos: $0.50 (mano de 3) / $0.83 (mano de 5); suma esos usos | `rechargeHand()` |
 | **Expansión PRO** $2.00 o prueba gratis con reto (hasta el lunes) | `CardPreviewModal` |

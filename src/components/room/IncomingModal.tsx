@@ -83,7 +83,7 @@ export function IncomingModal({
           </div>
           {noBudget && incoming.phase === 'defend' && readyCards(me.defenses).length > 0 && (
             <p className="text-center text-xs font-bold uppercase text-social">
-              Gastaste tus 10 usos de la semana: no podés quemar escudos
+              Gastaste tus energías de la semana: no podés quemar escudos
             </p>
           )}
           {incoming.reason && (

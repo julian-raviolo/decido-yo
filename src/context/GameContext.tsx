@@ -5,6 +5,8 @@ import {
   DEFENSE_WINDOW_SECONDS,
   MAX_PLAYERS,
   PRICES,
+  PRO_WEEKLY_REFILLS,
+  WEEKLY_BURNS,
   handSizeFor,
   rechargePrice,
   GAG_MINUTES,
@@ -128,6 +130,10 @@ interface GameContextValue {
   reshuffleHand(paid?: boolean): boolean;
   /** Recarga paga de una mano completa: reparte cartas nuevas y suma usos. */
   rechargeHand(): void;
+  /** Sin energías: refill pago (true) o usando un refill del Plan PRO (false). */
+  refillEnergy(paid: boolean): boolean;
+  /** Plan PRO simulado: 2 refills por semana + pack de expansión a elección. */
+  subscribePro(pack: GameMode): void;
   /** Modo Online: prueba de la víctima y voto del resto. */
   submitEvidence(playId: string, evidence: Omit<Evidence, 'at'>): void;
   voteEvidence(playId: string, vote: 'yes' | 'no'): void;
@@ -372,7 +378,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const r = roomRef.current;
     const me = r?.players.find((p) => p.isMe);
     if (!r || !me) return;
-    const size = handSizeFor(r.players.length);
+    const size = handSizeFor(r.players.length, !!r.saliduelo);
     const deck = deckOf(r.mode);
     const unlocked = unlockedNow();
     const reserved = [...me.actions, ...me.defenses].filter((c) => c.state === 'ready').map((c) => c.cardId);
@@ -734,11 +740,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const confirmHot = () => setSettings((s) => ({ ...s, hotConfirmed: true, mode: 'hot' }));
 
   /** Arma un jugador humano con su mano repartida desde su mazo semanal. */
-  const buildMe = (mode: GameMode, tableSize: number, scenario: Scenario): Player => {
+  const buildMe = (mode: GameMode, tableSize: number, scenario: Scenario, saliduelo = false): Player => {
     const prof = profileRef.current;
     const deck = deckOf(mode);
     setDecks({ ...decksRef.current, [mode]: deck });
-    const size = handSizeFor(tableSize);
+    const size = handSizeFor(tableSize, saliduelo);
     const unlocked = unlockedNow();
     const reserved: string[] = [];
     const deal = (def: boolean) =>
@@ -810,10 +816,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const scenario: Scenario = environment === 'ONLINE' ? 'REMOTE' : settings.scenario;
     const botCount = Math.max(1, Math.min(bots, MAX_PLAYERS[mode] - 1));
     const total = kind === 'bots' ? botCount + 1 : 1;
-    const me = buildMe(mode, total, scenario);
+    const me = buildMe(mode, total, scenario, settings.saliduelo);
 
     if (kind === 'bots') {
-      const size = handSizeFor(total);
+      const size = handSizeFor(total, settings.saliduelo);
       const names = BOT_NAMES.filter((n) => n.toLowerCase() !== me.name.toLowerCase())
         .sort(() => Math.random() - 0.5)
         .slice(0, botCount);
@@ -869,7 +875,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setRoom(r);
     connect(r);
     if (!r.players.some((p) => p.id === profileRef.current.id)) {
-      const me = buildMe(r.mode, r.players.length + 1, r.scenario);
+      const me = buildMe(r.mode, r.players.length + 1, r.scenario, !!r.saliduelo);
       send({ type: 'ADD_PLAYER', player: me });
       log(`👋 ${me.name} se sumó a la mesa.`, 'system');
     }
@@ -933,7 +939,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     }
     // Si la mesa pide más cartas de las que tengo, completo.
-    const size = handSizeFor(r.players.length);
+    const size = handSizeFor(r.players.length, !!r.saliduelo);
     for (const [slot, isDef, want] of [
       ['actions', false, size.actions],
       ['defenses', true, size.defenses],
@@ -961,10 +967,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  /** Vuelve a llenar las energías de la semana y reparte mano nueva. */
+  const refillEnergy = (paid: boolean) => {
+    const r = roomRef.current;
+    const mode = r?.mode ?? settings.mode;
+    const e = ensureEconomy(economyRef.current);
+    if (!paid) {
+      if (!e.pro || e.pro.refillsLeft <= 0) return false;
+      setEconomy({ ...e, pro: { ...e.pro, refillsLeft: e.pro.refillsLeft - 1 } });
+    } else recordPurchase('refill', PRICES.refill, mode);
+    setDecks({ ...decksRef.current, [mode]: { ...deckOf(mode), weeklyBurnsRemaining: WEEKLY_BURNS } });
+    if (r) {
+      if (!redealReady({ all: true })) redealReady({ all: true, allowBurned: true });
+      log(`⚡ ${says(meId(), 'recargó', 'recargaste')} sus energías (${WEEKLY_BURNS}).`, 'system');
+    }
+    return true;
+  };
+
+  const subscribePro = (pack: GameMode) => {
+    const e = ensureEconomy(economyRef.current);
+    recordPurchase('pro', PRICES.pro, pack);
+    const after = ensureEconomy(economyRef.current);
+    setEconomy({ ...after, pro: { since: e.pro?.since ?? Date.now(), refillsLeft: PRO_WEEKLY_REFILLS, pack } });
+    // El pack de expansión viene incluido en el plan (sin cargo aparte).
+    const u = ensureUnlocks(unlocksRef.current);
+    if (!u.packs.includes(pack)) setUnlocks({ ...u, packs: [...u.packs, pack] });
+  };
+
   const rechargeHand = () => {
     const r = roomRef.current;
     if (!r) return;
-    const size = handSizeFor(r.players.length);
+    const size = handSizeFor(r.players.length, !!r.saliduelo);
     const cards = size.actions + size.defenses;
     redealReady({ all: true, allowBurned: true });
     setDecks({ ...decksRef.current, [r.mode]: addBurns(deckOf(r.mode), cards) });
@@ -1397,6 +1430,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     economy,
     reshuffleHand,
     rechargeHand,
+    refillEnergy,
+    subscribePro,
     submitEvidence,
     voteEvidence,
     createRoom,

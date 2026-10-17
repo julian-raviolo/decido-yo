@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'framer-motion';
-import { Check, ChevronRight, Copy, MapPin, Swords, Trophy, Users } from 'lucide-react';
+import { Check, ChevronRight, Copy, MapPin, Swords, Trophy } from 'lucide-react';
 import { BrutalButton, Sheet } from '@/components/ui';
 import {
   SALIDUELO_HEARTS,
@@ -83,7 +83,6 @@ export function DuelBoard({
   const ready = !!sd.sides.A && !!sd.sides.B;
   const won = sd.phase === 'won';
 
-  const phaseLabel = won ? '🏆 Hay ganador' : sd.phase === 'battle' ? '🔥 Batalla' : '📍 Elección';
   const action = won ? (
     <button
       onClick={onOpenVictory}
@@ -117,34 +116,19 @@ export function DuelBoard({
 
   return (
     <section
-      className="shrink-0 rounded-3xl border-4 border-black bg-panel p-2.5 shadow-brutal-sm"
+      className="shrink-0 rounded-3xl border-4 border-black bg-panel p-2 shadow-brutal-sm"
       aria-label="SALIDUELO"
       onClick={won ? onOpenVictory : undefined}
     >
-      <div className="flex items-center gap-2 pl-1">
-        <span className="font-display text-sm font-black uppercase leading-none text-cream">⚔️ Saliduelo</span>
-        <span className="rounded-full border-2 border-black bg-cream px-2 py-0.5 text-[10px] font-black uppercase text-black">
-          {phaseLabel}
-        </span>
-        <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
-          {action}
-        </span>
-      </div>
-      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-stretch gap-1.5">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
         <SideCard sd={sd} side="A" mine={mySide === 'A'} />
-        <span className="self-center font-display text-sm font-black uppercase text-lime">vs</span>
+        <span className="font-display text-xs font-black uppercase text-lime">⚔️</span>
         <SideCard sd={sd} side="B" mine={mySide === 'B'} />
       </div>
-      {sd.phase === 'pick' && (
-        <p className="mt-1.5 px-1 text-[11px] font-semibold text-white/70">
-          {!sd.sides.A
-            ? 'El primero que elige arma el Lugar A.'
-            : !sd.sides.B
-              ? 'Falta un lugar rival: el primero distinto es el Lugar B.'
-              : isHost
-                ? 'Cuando estén listos, arrancá la batalla.'
-                : 'Arranca cuando eligen todos (o el anfitrión).'}
-        </p>
+      {action && (
+        <div className="mt-2 flex justify-center" onClick={(e) => e.stopPropagation()}>
+          {action}
+        </div>
       )}
     </section>
   );
@@ -170,37 +154,33 @@ function SideCard({ sd, side, mine }: { sd: Saliduelo; side: DuelSide; mine: boo
 
   if (!d) {
     return (
-      <div className="flex min-h-[88px] flex-col items-center justify-center gap-1 rounded-2xl border-[3px] border-dashed border-black bg-black/30 p-2 text-center">
-        <span className="font-display text-lg font-black text-white/60">{side}</span>
-        <span className="text-[10px] font-black uppercase tracking-widest text-white/60">Esperando lugar…</span>
+      <div className="flex h-14 items-center justify-center rounded-2xl border-[3px] border-dashed border-black bg-black/30 px-2 text-center text-[10px] font-black uppercase tracking-widest text-white/60">
+        Lugar {side}…
       </div>
     );
   }
   const venue = getVenue(d.venueId);
   const winner = sd.phase === 'won' && sd.winner === side;
   const loser = sd.phase === 'won' && sd.winner !== side;
-  const count = membersOf(sd, side).length;
 
   return (
     <motion.div
       animate={controls}
-      className={`relative flex min-w-0 flex-col gap-1 rounded-2xl border-[3px] border-black p-2 text-black ${
+      title={`${venue.name} · ${venue.promoText}`}
+      className={`relative flex h-14 min-w-0 items-center gap-1.5 rounded-2xl border-[3px] border-black px-1.5 text-black ${
         winner ? 'bg-lime' : 'bg-cream'
       } ${loser ? 'opacity-50' : ''} ${mine ? 'shadow-brutal-accent' : 'shadow-brutal-sm'}`}
     >
-      <div className="flex items-center gap-1.5">
-        <VenueLogo venue={venue} size={32} />
-        <span className="line-clamp-2 min-w-0 text-[11px] font-black uppercase leading-tight">{venue.name}</span>
-      </div>
-      <span className="truncate text-[10px] font-bold leading-tight text-black/70" title={venue.promoText}>
-        🎁 {venue.promoText}
-      </span>
-      <div className="mt-auto flex items-center justify-between gap-1">
-        <Hearts hearts={d.hearts} brokenKey={broken} />
-        <span className="flex items-center gap-0.5 text-[10px] font-black uppercase">
-          {winner ? <Trophy size={12} strokeWidth={3} /> : <Users size={11} strokeWidth={3} />}
-          {winner ? 'Gana' : `${side}·${count}`}
-        </span>
+      <VenueLogo venue={venue} size={30} />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-[11px] font-black uppercase leading-tight">{venue.name}</span>
+        {winner ? (
+          <span className="flex items-center gap-0.5 text-[10px] font-black uppercase">
+            <Trophy size={12} strokeWidth={3} /> Gana
+          </span>
+        ) : (
+          <Hearts hearts={d.hearts} brokenKey={broken} />
+        )}
       </div>
       {mine && (
         <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-black bg-lime px-1.5 text-[9px] font-black uppercase leading-[14px]">

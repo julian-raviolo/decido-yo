@@ -55,7 +55,7 @@ export default function MazoPage() {
       <section className="rounded-3xl border-4 border-black bg-panel p-4 shadow-brutal-cream">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2 font-display font-black uppercase">
-            <Flame size={18} strokeWidth={3} /> Usos de esta semana
+            <Flame size={18} strokeWidth={3} /> Energías de esta semana
           </span>
           <span className="font-display text-xl font-black text-lime">
             {left}/{WEEKLY_BURNS}
@@ -133,9 +133,9 @@ export default function MazoPage() {
       <BrutalButton
         variant="dark"
         className="mt-2 flex items-center justify-center gap-2 text-sm"
-        onClick={() => confirm('Modo dev: ¿reiniciar los 10 usos de esta semana?') && game.resetDeck()}
+        onClick={() => confirm('Modo dev: ¿reiniciar las energías de esta semana?') && game.resetDeck()}
       >
-        <RotateCcw size={16} strokeWidth={3} /> Reiniciar usos (dev)
+        <RotateCcw size={16} strokeWidth={3} /> Reiniciar energías (dev)
       </BrutalButton>
 
       <CardPreviewModal
