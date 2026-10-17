@@ -5,7 +5,6 @@ import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 
 import { Check, ChevronRight, Copy, MapPin, Swords, Trophy } from 'lucide-react';
 import { BrutalButton, Sheet } from '@/components/ui';
 import {
-  SALIDUELO_HEARTS,
   VENUE_CATEGORIES,
   businessWhatsappUrl,
   getVenue,
@@ -34,32 +33,6 @@ export function VenueLogo({ venue, size = 40 }: { venue: Venue; size?: number })
   );
 }
 
-function Hearts({ hearts, size = 14, brokenKey }: { hearts: number; size?: number; brokenKey?: string | null }) {
-  return (
-    <span className="relative flex items-center gap-0.5" aria-label={`${hearts} de ${SALIDUELO_HEARTS} corazones`}>
-      {Array.from({ length: SALIDUELO_HEARTS }, (_, i) => (
-        <span key={i} className={`leading-none ${i < hearts ? '' : 'opacity-30 grayscale'}`} style={{ fontSize: size }}>
-          {i < hearts ? '❤️' : '🖤'}
-        </span>
-      ))}
-      {/* El corazón que se acaba de perder: se rompe y cae */}
-      <AnimatePresence>
-        {brokenKey && (
-          <motion.span
-            key={brokenKey}
-            className="pointer-events-none absolute leading-none"
-            style={{ left: `${(hearts / SALIDUELO_HEARTS) * 100}%`, fontSize: size + 8 }}
-            initial={{ scale: 0.4, y: 0, opacity: 1 }}
-            animate={{ scale: [0.4, 1.6, 1.2], y: [0, -10, 22], opacity: [1, 1, 0], rotate: [0, -12, 18] }}
-            transition={{ duration: 0.9, times: [0, 0.35, 1] }}
-          >
-            💔
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </span>
-  );
-}
 
 /* ---------- Tablero del duelo (arriba de la mesa) ---------- */
 
@@ -138,19 +111,14 @@ function SideCard({ sd, side, mine }: { sd: Saliduelo; side: DuelSide; mine: boo
   const reduce = !!useReducedMotion();
   const d = sd.sides[side];
   const controls = useAnimationControls();
-  const hitKey = sd.lastHit?.side === side ? sd.lastHit.id : null;
-  // El golpe que ya estaba al montar no se anima (al recargar o entrar tarde).
-  const seen = useRef(hitKey);
-  const [broken, setBroken] = useState<string | null>(null);
-
+  const wins = sd.wins?.[side] ?? 0;
+  // Mano ganada: rebote del lugar (no al montar).
+  const seen = useRef(wins);
   useEffect(() => {
-    if (!hitKey || hitKey === seen.current) return;
-    seen.current = hitKey;
-    if (!reduce) void controls.start({ x: [0, -9, 9, -7, 7, -3, 0], transition: { duration: 0.5 } });
-    setBroken(hitKey);
-    const t = setTimeout(() => setBroken(null), 1000);
-    return () => clearTimeout(t);
-  }, [hitKey, controls, reduce]);
+    if (wins === seen.current) return;
+    seen.current = wins;
+    if (!reduce) void controls.start({ scale: [1, 1.08, 1], transition: { duration: 0.4 } });
+  }, [wins, controls, reduce]);
 
   if (!d) {
     return (
@@ -179,7 +147,7 @@ function SideCard({ sd, side, mine }: { sd: Saliduelo; side: DuelSide; mine: boo
             <Trophy size={12} strokeWidth={3} /> Gana
           </span>
         ) : (
-          <Hearts hearts={d.hearts} brokenKey={broken} />
+          <span className="text-[10px] font-black uppercase">🏅 {sd.wins?.[side] ?? 0} de 2 manos</span>
         )}
       </div>
       {mine && (
@@ -198,7 +166,7 @@ export function VenueB2BCard() {
     <div className="flex flex-col gap-2 rounded-3xl border-4 border-dashed border-black bg-destiny p-4 text-white">
       <span className="font-display text-lg font-black uppercase leading-none">✨ Tu local puede estar aquí</span>
       <p className="text-sm font-semibold text-white/90">
-        Sumá tu marca, bar o evento a SALIDUELO y atraé grupos y parejas a tu local.
+        Promocioná tu bar, restaurante o evento en SALIDUELO.
       </p>
       <a
         href={businessWhatsappUrl()}
@@ -206,7 +174,7 @@ export function VenueB2BCard() {
         rel="noopener noreferrer"
         className="mt-1 flex min-h-[44px] items-center justify-center rounded-2xl border-[3px] border-black bg-cream px-3 py-2 text-center font-display text-xs font-black uppercase text-black shadow-brutal-sm transition-transform active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
       >
-        📲 Quiero sumar mi local (WhatsApp)
+        📲 Contactar por WhatsApp
       </a>
     </div>
   );
@@ -256,7 +224,7 @@ export function VenuePicker({
       {sidesOnly ? (
         <div className="flex flex-col gap-3">
           <p className="-mt-2 text-sm font-semibold text-black/70">
-            Defendé tu lugar: cada vez que alguien de tu bando no cumple una carta, pierde un ❤️.
+            Defendé tu lugar: se juega al mejor de 3 manos con minijuegos al azar.
           </p>
           {(['A', 'B'] as const).map((side) => {
             const d = sd.sides[side];
@@ -277,7 +245,7 @@ export function VenuePicker({
                   <span className="block truncate text-[12px] font-bold text-black/70">🎁 {venue.promoText}</span>
                 </span>
                 <span className="flex flex-col items-end gap-1 text-[10px] font-black uppercase">
-                  <Hearts hearts={d.hearts} size={12} />
+
                   {mySide === side ? 'Tu bando' : taken ? `De ${taken}` : `👥 ${membersOf(sd, side).length}`}
                 </span>
               </button>

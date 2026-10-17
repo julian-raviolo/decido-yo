@@ -87,8 +87,8 @@ const SLIDES: Slide[] = [
     title: '⚔️ Saliduelo',
     line: (hot) =>
       hot
-        ? 'Cada uno defiende su lugar con 2 ❤️. El que no cumple pierde uno: el que queda en pie elige la salida.'
-        : 'Cada bando defiende un lugar con 2 ❤️. El que no cumple pierde uno: el que queda en pie elige la salida.',
+        ? 'Cada uno defiende su lugar en 3 manos de minijuegos: el que gana 2 elige la salida.'
+        : 'Bandos con representante al azar en cada mano: el lugar que gana 2 de 3 minijuegos es la salida.',
     ms: 6000,
     Art: DuelArt,
   },
@@ -605,7 +605,7 @@ function BurnsArt({ reduce }: SlideProps) {
   );
 }
 
-/** Dos lugares con 2 ❤️: A pierde de a uno (shake + corazón roto) y gana B. */
+/** Dos lugares: B gana 2 manos de minijuegos y se lleva la salida. */
 function DuelArt({ reduce }: SlideProps) {
   const [lost, setLost] = useState(reduce ? 2 : 0);
   useEffect(() => {
@@ -622,7 +622,7 @@ function DuelArt({ reduce }: SlideProps) {
     <div className="relative flex w-[300px] flex-col items-center gap-4">
       <div className="flex items-center gap-3">
         <div className="relative">
-          <DuelPlace emoji="🍕" color="#FFD600" name="Lugar A" hearts={2 - lost} shake={done ? undefined : lost} dim={done} reduce={reduce} />
+          <DuelPlace emoji="🍕" color="#FFD600" name="Lugar A" hearts={0} shake={done ? undefined : lost} dim={done} reduce={reduce} />
           <AnimatePresence>
             {!reduce && lost > 0 && (
               <motion.span
@@ -632,13 +632,13 @@ function DuelArt({ reduce }: SlideProps) {
                 animate={{ scale: [0.4, 1.5, 1.1], y: [0, -12, 24], opacity: [1, 1, 0] }}
                 transition={{ duration: 0.9, times: [0, 0.35, 1] }}
               >
-                💔
+                ⚡
               </motion.span>
             )}
           </AnimatePresence>
         </div>
         <span className="font-display text-xl font-black uppercase text-lime">vs</span>
-        <DuelPlace emoji="🎳" color="#00E5FF" name="Lugar B" hearts={2} win={done} reduce={reduce} />
+        <DuelPlace emoji="🎳" color="#00E5FF" name="Lugar B" hearts={lost} win={done} reduce={reduce} />
       </div>
       <motion.div
         initial={reduce ? false : { opacity: 0, scale: 0.7, rotate: -6 }}
@@ -694,9 +694,9 @@ function DuelPlace({
       </span>
       <span className="text-center text-[11px] font-black uppercase leading-tight">{name}</span>
       <span className="flex gap-0.5 text-base leading-none">
-        {[0, 1, 2].map((i) => (
+        {[0, 1].map((i) => (
           <span key={i} className={i < hearts ? '' : 'opacity-30 grayscale'}>
-            {i < hearts ? '❤️' : '🖤'}
+            {i < hearts ? '🏅' : '⚪'}
           </span>
         ))}
       </span>

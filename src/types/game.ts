@@ -206,6 +206,31 @@ export interface Saliduelo {
   hits: string[];
   /** Último corazón perdido: dispara la animación en todos los celulares. */
   lastHit?: { id: string; side: DuelSide; at: number };
+  /** Batalla al mejor de 3 manos con minijuegos. */
+  wins?: { A: number; B: number };
+  round?: DuelRound;
+  history?: { n: number; game: MiniGame; winner: DuelSide }[];
+}
+
+export type MiniGame = 'RPS' | 'REFLEX' | 'TAP';
+
+/** Una mano de la batalla: minijuego sorteado entre 2 representantes. */
+export interface DuelRound {
+  n: number;
+  game: MiniGame;
+  reps: { A: string; B: string };
+  /** Duelo de reflejos: ms de espera antes de la señal. */
+  delay: number;
+  /** Empates (PPT / tap) que reiniciaron la mano. */
+  ties: number;
+  choices?: Record<string, RpsChoice>;
+  /** Reflejos: ms de reacción (negativo = se adelantó). */
+  reactions?: Record<string, number>;
+  taps?: Record<string, number>;
+  done?: Record<string, boolean>;
+  winner?: DuelSide;
+  /** Para el revelado de PPT. */
+  last?: Record<string, RpsChoice>;
 }
 
 export interface RouletteRequest {

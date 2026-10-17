@@ -1,3 +1,5 @@
+import type { MiniGame } from '@/types/game';
+
 /**
  * Catálogo de lugares para ⚔️ SALIDUELO.
  *
@@ -104,3 +106,24 @@ export const businessWhatsappUrl = (n: string = BUSINESS_WHATSAPP_NUMBER) =>
   `https://wa.me/${n}?text=Hola!%20Quiero%20sumar%20mi%20local%20a%20SALIDUELO%20en%20Decido%20Yo`;
 
 export const SALIDUELO_HEARTS = 2;
+
+/* ---------- Batalla: 3 minijuegos al mejor de 3 manos ---------- */
+
+export const MINI_GAME_META: Record<MiniGame, { label: string; emoji: string; hint: string }> = {
+  RPS: { label: 'Piedra, Papel o Tijera', emoji: '🪨📄✂️', hint: 'Elegí en 5 segundos. Si empatan, va de nuevo.' },
+  REFLEX: { label: 'Duelo de Reflejos', emoji: '⚡', hint: 'Esperá la señal verde. Si tocás antes, perdés.' },
+  TAP: { label: 'Tap Frenético', emoji: '🔥', hint: '7 segundos: tocá lo más rápido que puedas.' },
+};
+/** Presentación de cada mano antes de jugar. */
+export const DUEL_INTRO_MS = 2600;
+/** Pausa entre el resultado de una mano y la siguiente. */
+export const DUEL_NEXT_MS = 3200;
+export const RPS_MS = 5000;
+export const TAP_MS = 7000;
+export const REFLEX_WINDOW_MS = 3000;
+/** Si un representante no responde (se desconectó), el coordinador juega por él. */
+export const DUEL_FALLBACK_MS: Record<MiniGame, number> = {
+  RPS: RPS_MS + 5000,
+  REFLEX: REFLEX_WINDOW_MS + 5000,
+  TAP: TAP_MS + 5000,
+};

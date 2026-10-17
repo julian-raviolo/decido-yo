@@ -13,6 +13,7 @@ import { IncomingModal } from '@/components/room/IncomingModal';
 import { PlayersBar } from '@/components/room/PlayersBar';
 import { RouletteModal } from '@/components/room/RouletteModal';
 import { RpsModal } from '@/components/room/RpsModal';
+import { DuelMatch } from '@/components/room/DuelMatch';
 import { DuelBoard, SaliduelVictory, VenuePicker } from '@/components/room/Saliduelo';
 import { BotSheet, RuleSheet, VictimPicker } from '@/components/room/Sheets';
 import { ActiveBar } from '@/components/room/ActiveBar';
@@ -444,6 +445,7 @@ export default function SalaPage() {
             onPick={game.pickVenue}
             onClose={() => setVenueOpen(false)}
           />
+          <DuelMatch />
           <SaliduelVictory open={victoryOpen} room={room} meId={me.id} onClose={() => setVictoryOpen(false)} />
         </>
       )}

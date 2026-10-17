@@ -280,7 +280,7 @@ export default function HomePage() {
             disabled={!!room}
             onClick={() => game.setSaliduelo(true)}
             activeClass="bg-lime text-black"
-            title="Batalla de lugares: 2 ❤️ por bando y cupón para el ganador"
+            title="Batalla de lugares al mejor de 3 minijuegos, con cupón para el ganador"
           >
             <span className="text-sm leading-none">⚔️</span> Saliduelo
           </SegButton>
@@ -302,8 +302,8 @@ export default function HomePage() {
           <p className="mt-1.5 text-xs font-semibold [text-wrap:pretty]">
             {duel
               ? hot
-                ? 'Cada uno defiende su lugar con 2 ❤️: el que queda en pie elige la salida.'
-                : 'Cada bando defiende un lugar con 2 ❤️: el que queda en pie elige la salida.'
+                ? 'Cada uno defiende su lugar en 3 minijuegos: el que gana 2 elige la salida.'
+                : 'Dos bandos, un representante al azar por mano: el que gana 2 de 3 elige la salida.'
               : hot
                 ? 'Sala para 2: creala y pasale el código a tu pareja.'
                 : 'Hasta 12, cada uno desde su celu y con su propio mazo.'}
@@ -444,8 +444,8 @@ export default function HomePage() {
                 Te atacan: <b>60 s</b> para defenderte o cumplir. ¿No cumplís? <b>Ruleta</b> de castigo.
               </li>
               <li>
-                <b>⚔️ Saliduelo</b>: cada bando defiende un lugar con <b>2 ❤️</b>. El que no cumple le saca un
-                corazón a su lugar; el que queda en pie gana y revela su cupón.
+                <b>⚔️ Saliduelo</b>: cada bando defiende un lugar en <b>3 manos</b> de minijuegos al azar (Piedra Papel o
+                Tijera, Reflejos o Tap Frenético). El que gana 2 revela su cupón.
               </li>
               {hot && (
                 <li>

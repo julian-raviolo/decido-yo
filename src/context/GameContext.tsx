@@ -15,7 +15,16 @@ import {
   hasCard,
 } from '@/data/cards-catalog';
 import { BOT_RULES, HOT_BOT_RULES } from '@/data/punishments';
-import { VENUES, getVenue, hasVenue } from '@/data/venues-catalog';
+import {
+  DUEL_FALLBACK_MS,
+  DUEL_INTRO_MS,
+  DUEL_NEXT_MS,
+  MINI_GAME_META,
+  TAP_MS,
+  VENUES,
+  getVenue,
+  hasVenue,
+} from '@/data/venues-catalog';
 import {
   burnCard,
   addBurns,
@@ -51,6 +60,9 @@ import type {
   Room,
   RpsChoice,
   Saliduelo,
+  DuelRound,
+  DuelSide,
+  MiniGame,
   Scenario,
   TablePlay,
   Unlocks,
@@ -124,6 +136,10 @@ interface GameContextValue {
   /** ⚔️ SALIDUELO: elegir lugar (o sumarse a un bando) y arrancar la batalla. */
   pickVenue(venueId: string): void;
   startSaliduelo(): void;
+  /** Minijuegos del SALIDUELO (sólo los representantes de la mano). */
+  duelRps(choice: RpsChoice): void;
+  duelReact(ms: number): void;
+  duelTaps(count: number, final: boolean): void;
   /** Economía: re-barajados gratis restantes esta semana y compras simuladas. */
   economy: Economy;
   /** Re-barajar mano: gratis (2 por semana) o pago simulado ($0.50). */
@@ -535,7 +551,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       send({ type: 'SET_PLAY_STATUS', playId, status: 'refused' });
       log(`🙅 ${bot.name} se niega a «${card.name}» → Ruleta.`, 'punish');
       pushRoulette(bot.id, `Se negó a «${card.name}»`);
-      saliDamage(bot.id, playId);
       return;
     }
     applyComply(play, propagate, durationFactor);
@@ -802,7 +817,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               ? `Sala HOT ${code} abierta. Pasale el código a tu pareja.`
               : `Sala ${code} abierta. Compartí el código para que se sumen tus amigos.`
             : `Modo prueba ${code}: ${players.length - 1} bots en la mesa.`) +
-          (saliduelo ? ' ⚔️ SALIDUELO: cada uno elige a dónde ir y se defiende con 3 ❤️.' : ''),
+          (saliduelo ? ' ⚔️ SALIDUELO: cada uno elige a dónde ir y se define al mejor de 3 minijuegos.' : ''),
       },
     ],
   });
@@ -1034,7 +1049,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'refused' });
         log(`👎 ${why} «${card.name}» → Ruleta.`, 'punish');
         pushRoulette(play.toId!, `No convenció con «${card.name}»`);
-        saliDamage(play.toId!, play.id);
       };
       if (!play.evidence) {
         if (now > (play.evidenceUntil ?? 0)) fail(`${says(play.toId, 'no mostró', 'no mostraste')} la prueba de`);
@@ -1064,6 +1078,99 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   };
   useEffect(() => {
     const t = setInterval(() => evidenceTick.current(), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  /* ---------------- ⚔️ SALIDUELO: minijuegos al mejor de 3 ---------------- */
+
+  /** Momento (reloj local) en que este celular vio por primera vez una clave: evita depender del reloj de otros. */
+  const duelSeen = useRef<Record<string, number>>({});
+  const seenAt = (key: string) => (duelSeen.current[key] ??= Date.now());
+  const duelPlan = useRef<Record<string, number>>({});
+  const plan = (key: string, gen: () => number) => (duelPlan.current[key] ??= gen());
+  const duelLogged = useRef<string | null>(null);
+
+  /** Quien coordina la batalla: el anfitrión (o el primer humano si se fue). */
+  const isDuelDriver = (r: Room) => {
+    const host = r.players.find((p) => p.id === r.hostId && !p.isBot) ?? r.players.find((p) => !p.isBot);
+    return host?.id === meId();
+  };
+
+  const duelRps: GameContextValue['duelRps'] = (choice) => {
+    const round = roomRef.current?.saliduelo?.round;
+    if (round) send({ type: 'SD_RPS', n: round.n, playerId: meId(), choice });
+  };
+  const duelReact: GameContextValue['duelReact'] = (ms) => {
+    const round = roomRef.current?.saliduelo?.round;
+    if (round) send({ type: 'SD_REACT', n: round.n, playerId: meId(), ms: Math.round(ms) });
+  };
+  const duelTaps: GameContextValue['duelTaps'] = (count, final) => {
+    const round = roomRef.current?.saliduelo?.round;
+    if (round) send({ type: 'SD_TAPS', n: round.n, playerId: meId(), count, final });
+  };
+
+  const duelTick = useRef<() => void>(() => {});
+  duelTick.current = () => {
+    const r = roomRef.current;
+    const sd = r?.saliduelo;
+    if (!r || !sd || !isDuelDriver(r)) return;
+    const round = sd.round;
+
+    // Log del resultado de cada mano (una vez, desde el coordinador).
+    if (round?.winner && duelLogged.current !== `${r.code}:${round.n}`) {
+      duelLogged.current = `${r.code}:${round.n}`;
+      const venue = sd.sides[round.winner] ? getVenue(sd.sides[round.winner]!.venueId).name : round.winner;
+      log(`🏅 Mano ${round.n} (${MINI_GAME_META[round.game].label}) para «${venue}».`, 'system');
+      if (sd.phase === 'won') log(`🏆 ¡«${venue}» gana el SALIDUELO! Cupón desbloqueado.`, 'system');
+    }
+    if (sd.phase !== 'battle') return;
+    const now = Date.now();
+
+    // Nueva mano: al arrancar o unos segundos después del resultado anterior.
+    if (!round || round.winner) {
+      if (round && now - seenAt(`${r.code}:next:${round.n}`) < DUEL_NEXT_MS) return;
+      const present = (side: DuelSide) => r.players.filter((p) => sd.picks[p.id] === side);
+      const A = present('A');
+      const B = present('B');
+      if (!A.length || !B.length) return;
+      const games = (Object.keys(MINI_GAME_META) as MiniGame[]).filter((g) => g !== round?.game);
+      const next: DuelRound = {
+        n: (round?.n ?? 0) + 1,
+        game: pickRandom(games),
+        reps: { A: pickRandom(A).id, B: pickRandom(B).id },
+        delay: 2000 + Math.round(Math.random() * 2500),
+        ties: 0,
+      };
+      send({ type: 'SD_ROUND', round: next });
+      log(`🎯 Mano ${next.n} · ${MINI_GAME_META[next.game].label}: ${nameOf(next.reps.A)} vs ${nameOf(next.reps.B)}.`, 'system');
+      return;
+    }
+
+    // Bots y ausentes: el coordinador juega por ellos.
+    const key = `${r.code}:${round.n}:${round.ties}`;
+    const el = now - seenAt(key) - DUEL_INTRO_MS;
+    if (el < 0) return;
+    for (const id of [round.reps.A, round.reps.B]) {
+      const bot = !!player(id)?.isBot;
+      const gone = !player(id);
+      if (!bot && !gone && el < DUEL_FALLBACK_MS[round.game] + round.delay * (round.game === 'REFLEX' ? 1 : 0)) continue;
+      if (round.game === 'RPS' && !round.choices?.[id]) {
+        if (!bot || el > plan(`${key}:${id}`, () => 700 + Math.random() * 1500))
+          send({ type: 'SD_RPS', n: round.n, playerId: id, choice: randomRps() });
+      } else if (round.game === 'REFLEX' && round.reactions?.[id] === undefined) {
+        const rt = bot ? plan(`${key}:${id}`, () => (Math.random() < 0.08 ? -1 : 230 + Math.random() * 420)) : 3000;
+        if (rt < 0 ? el > round.delay * 0.6 : el > round.delay + rt)
+          send({ type: 'SD_REACT', n: round.n, playerId: id, ms: Math.round(rt) });
+      } else if (round.game === 'TAP' && !round.done?.[id]) {
+        const rate = bot ? plan(`${key}:${id}`, () => 4.5 + Math.random() * 3) : 0;
+        const count = bot ? Math.floor((Math.min(el, TAP_MS) / 1000) * rate) : (round.taps?.[id] ?? 0);
+        const final = el >= TAP_MS;
+        if (final || count > (round.taps?.[id] ?? 0)) send({ type: 'SD_TAPS', n: round.n, playerId: id, count, final });
+      }
+    }
+  };
+  useEffect(() => {
+    const t = setInterval(() => duelTick.current(), 300);
     return () => clearInterval(t);
   }, []);
 
@@ -1120,7 +1227,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       send({ type: 'SET_PLAY_STATUS', playId: play.id, status: 'refused' });
       log(`🙅 ${says(me.id, 'se niega', 'te negaste')} a «${name}» → Ruleta.`, 'punish');
       pushRoulette(me.id, `Se negó a «${name}»`);
-      saliDamage(me.id, play.id);
       return;
     }
     applyComply(play, !inc.noPropagate, inc.durationFactor ?? 1);
@@ -1253,20 +1359,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return v ? getVenue(v.venueId).name : '¿?';
   };
 
-  /** La víctima no cumplió: su lugar pierde 1 ❤️ (una sola vez por jugada). */
-  const saliDamage = (victimId: string, playId: string) => {
-    const sd = roomRef.current?.saliduelo;
-    const side = sd?.picks[victimId];
-    if (!sd || sd.phase !== 'battle' || !side || !sd.sides[side] || sd.hits.includes(playId)) return;
-    send({ type: 'SALIDUELO_DAMAGE', playId, playerId: victimId, at: Date.now() });
-    const after = roomRef.current?.saliduelo;
-    const hearts = after?.sides[side]?.hearts ?? 0;
-    log(`💔 «${venueName(after, side)}» pierde un corazón (quedan ${hearts}).`, 'punish');
-    if (after?.phase === 'won' && after.winner) {
-      log(`🏆 ¡«${venueName(after, after.winner)}» gana el SALIDUELO! Cupón desbloqueado.`, 'system');
-    }
-  };
-
   /** Bots del modo prueba: eligen lugar al azar (el primero que falte arma el Lugar B). */
   const botPickVenue = (botId: string) => {
     const r = roomRef.current;
@@ -1297,7 +1389,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   };
 
   const announceBattle = (sd: Saliduelo) =>
-    log(`⚔️ ¡Arranca el SALIDUELO! «${venueName(sd, 'A')}» vs «${venueName(sd, 'B')}». El que se niega, le saca un ❤️ a su lugar.`, 'system');
+    log(`⚔️ ¡Arranca el SALIDUELO! «${venueName(sd, 'A')}» vs «${venueName(sd, 'B')}». Al mejor de 3 manos de minijuegos.`, 'system');
 
   const pickVenue: GameContextValue['pickVenue'] = (venueId) => {
     const r = roomRef.current;
@@ -1372,7 +1464,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const autoRef = useRef<() => void>(() => {});
   autoRef.current = () => {
     const r = roomRef.current;
-    if (r?.kind !== 'bots' || !r.botAuto || r.incoming.length || r.rps || r.roulettes.length) return;
+    if (r?.kind !== 'bots' || !r.botAuto || r.incoming.length || r.rps || r.roulettes.length || r.saliduelo?.phase === 'battle') return;
     if (Math.random() > 0.45) return;
     const bots = r.players.filter((p) => p.isBot && readyCards(p.actions).length && !isGagged(p));
     if (!bots.length) return;
@@ -1427,6 +1519,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setSaliduelo,
     pickVenue,
     startSaliduelo,
+    duelRps,
+    duelReact,
+    duelTaps,
     economy,
     reshuffleHand,
     rechargeHand,

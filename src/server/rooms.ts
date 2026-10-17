@@ -66,6 +66,10 @@ const ALLOWED = new Set<RoomAction['type']>([
   'SALIDUELO_PICK',
   'SALIDUELO_START',
   'SALIDUELO_DAMAGE',
+  'SD_ROUND',
+  'SD_RPS',
+  'SD_REACT',
+  'SD_TAPS',
 ]);
 
 export function applyActions(code: string, actions: RoomAction[]): Snapshot | null {

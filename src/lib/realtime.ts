@@ -1,5 +1,7 @@
 import { SALIDUELO_HEARTS, hasVenue } from '@/data/venues-catalog';
 import type {
+  DuelRound,
+  MiniGame,
   ActiveEffect,
   DuelSide,
   HandCard,
@@ -48,10 +50,34 @@ export type RoomAction =
   /* ⚔️ SALIDUELO */
   | { type: 'SALIDUELO_PICK'; playerId: string; venueId: string }
   | { type: 'SALIDUELO_START' }
-  | { type: 'SALIDUELO_DAMAGE'; playId: string; playerId: string; at: number };
+  | { type: 'SALIDUELO_DAMAGE'; playId: string; playerId: string; at: number }
+  | { type: 'SD_ROUND'; round: DuelRound }
+  | { type: 'SD_RPS'; n: number; playerId: string; choice: RpsChoice }
+  | { type: 'SD_REACT'; n: number; playerId: string; ms: number }
+  | { type: 'SD_TAPS'; n: number; playerId: string; count: number; final: boolean };
 
 const RPS_CHOICES: RpsChoice[] = ['ROCK', 'PAPER', 'SCISSORS'];
 const other = (s: DuelSide): DuelSide => (s === 'A' ? 'B' : 'A');
+const MINI_GAMES: MiniGame[] = ['RPS', 'REFLEX', 'TAP'];
+const BEATS_RPS: Record<RpsChoice, RpsChoice> = { ROCK: 'SCISSORS', PAPER: 'ROCK', SCISSORS: 'PAPER' };
+const repSide = (r: DuelRound, id: string): DuelSide | null => (r.reps.A === id ? 'A' : r.reps.B === id ? 'B' : null);
+const withRound = (room: Room, sd: Saliduelo, round: DuelRound): Room => ({ ...room, saliduelo: { ...sd, round } });
+/** Cierra la mano: suma la victoria y, con 2 manos ganadas, termina el duelo. */
+function finishRound(room: Room, sd: Saliduelo, round: DuelRound, winner: DuelSide): Room {
+  const wins = { ...(sd.wins ?? { A: 0, B: 0 }) };
+  wins[winner] += 1;
+  const won = wins[winner] >= 2;
+  return {
+    ...room,
+    saliduelo: {
+      ...sd,
+      wins,
+      round: { ...round, winner },
+      history: [...(sd.history ?? []), { n: round.n, game: round.game, winner }],
+      ...(won ? { phase: 'won' as const, winner } : {}),
+    },
+  };
+}
 
 /**
  * Elección de lugar. Reglas de bandos:
@@ -229,6 +255,55 @@ export function roomReducer(room: Room | null, action: RoomAction): Room | null 
       const sd = room.saliduelo;
       if (!sd || sd.phase !== 'pick' || !sd.sides.A || !sd.sides.B) return room;
       return { ...room, saliduelo: { ...sd, phase: 'battle' } };
+    }
+    case 'SD_ROUND': {
+      const sd = room.saliduelo;
+      const r = action.round;
+      if (!sd || sd.phase !== 'battle' || r.n !== (sd.round?.n ?? 0) + 1 || (sd.round && !sd.round.winner)) return room;
+      if (!MINI_GAMES.includes(r.game) || !r.reps?.A || !r.reps?.B) return room;
+      return { ...room, saliduelo: { ...sd, wins: sd.wins ?? { A: 0, B: 0 }, round: { ...r, ties: 0 } } };
+    }
+    case 'SD_RPS': {
+      const sd = room.saliduelo;
+      const r = sd?.round;
+      const side = r && repSide(r, action.playerId);
+      if (!sd || !r || r.n !== action.n || r.game !== 'RPS' || r.winner || !side || !RPS_CHOICES.includes(action.choice))
+        return room;
+      if (r.choices?.[action.playerId]) return room;
+      const choices = { ...(r.choices ?? {}), [action.playerId]: action.choice };
+      const a = choices[r.reps.A];
+      const b = choices[r.reps.B];
+      if (!a || !b) return withRound(room, sd, { ...r, choices });
+      if (a === b) return withRound(room, sd, { ...r, choices: {}, ties: r.ties + 1, last: choices });
+      return finishRound(room, sd, { ...r, choices, last: choices }, BEATS_RPS[a] === b ? 'A' : 'B');
+    }
+    case 'SD_REACT': {
+      const sd = room.saliduelo;
+      const r = sd?.round;
+      const side = r && repSide(r, action.playerId);
+      if (!sd || !r || r.n !== action.n || r.game !== 'REFLEX' || r.winner || !side) return room;
+      if (r.reactions?.[action.playerId] !== undefined) return room;
+      const reactions = { ...(r.reactions ?? {}), [action.playerId]: action.ms };
+      const next = { ...r, reactions };
+      if (action.ms < 0) return finishRound(room, sd, next, other(side));
+      const a = reactions[r.reps.A];
+      const b = reactions[r.reps.B];
+      if (a === undefined || b === undefined) return withRound(room, sd, next);
+      return finishRound(room, sd, next, a <= b ? 'A' : 'B');
+    }
+    case 'SD_TAPS': {
+      const sd = room.saliduelo;
+      const r = sd?.round;
+      const side = r && repSide(r, action.playerId);
+      if (!sd || !r || r.n !== action.n || r.game !== 'TAP' || r.winner || !side || r.done?.[action.playerId]) return room;
+      const taps = { ...(r.taps ?? {}), [action.playerId]: Math.max(r.taps?.[action.playerId] ?? 0, Math.min(200, action.count)) };
+      const done = action.final ? { ...(r.done ?? {}), [action.playerId]: true } : r.done;
+      const next = { ...r, taps, done };
+      if (!done?.[r.reps.A] || !done?.[r.reps.B]) return withRound(room, sd, next);
+      const a = taps[r.reps.A] ?? 0;
+      const b = taps[r.reps.B] ?? 0;
+      if (a === b) return withRound(room, sd, { ...next, taps: {}, done: {}, ties: r.ties + 1 });
+      return finishRound(room, sd, next, a > b ? 'A' : 'B');
     }
     case 'SALIDUELO_DAMAGE': {
       const sd = room.saliduelo;
