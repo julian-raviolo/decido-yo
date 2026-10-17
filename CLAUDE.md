@@ -25,15 +25,11 @@ Toda tarea que toque UI (`src/app/**`, `src/components/**`, `src/app/globals.css
 
 Los archivos están en `.claude/commands/`. Leé `ui-ux-pro-max.md` y `taste-skill.md` antes de cualquier cambio visual.
 
-## Flujo por defecto con subagentes
+## Forma de trabajo
 
-Para cualquier cambio de UI que no sea trivial:
-
-1. **`ui-builder`** (`.claude/agents/ui-builder.md`) implementa el cambio siguiendo `/ui-ux-pro-max` + `/taste-skill` y devuelve la lista de archivos modificados.
-2. **`ui-auditor`** (`.claude/agents/ui-auditor.md`) revisa esos archivos con el criterio de `/impeccable`, corrige errores visuales y verifica con capturas en Clásico y HOT.
-3. La tarea se da por terminada sólo cuando el auditor devuelve **aprobada** y `tsc` + `build` están en verde.
-
-Para ajustes de una línea (un color, un texto) se puede saltear el builder, pero no la verificación visual.
+- Hacer sólo la tarea pedida, sin subagentes de construcción/auditoría (se quitaron).
+- Verificar con `npx tsc --noEmit` y `npm run build`. No enviar capturas ni imágenes al usuario salvo que las pida.
+- Ahorrar tokens: respuestas breves.
 
 ## Reglas que no se negocian
 
